@@ -32,4 +32,10 @@ export const svRequireNativeEvents: Rule = {
       },
     });
   },
+  fix: (source) => {
+    // Replace on:event={handler} with onevent={handler}
+    // Does NOT match on:event|modifier (the pipe stops the \w+ match before =)
+    const result = source.replace(/on:(\w+)(\s*=)/g, 'on$1$2');
+    return result !== source ? result : null;
+  },
 };
