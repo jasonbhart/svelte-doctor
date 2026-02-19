@@ -80,12 +80,17 @@ program
 
 program
   .command('init')
-  .description('Generate agent context files (.cursorrules, Claude Code skill)')
+  .description('Generate agent context files, CI workflow, and hook configs')
   .action(async () => {
     const { runInit } = await import('./init.js');
     console.log('\n  svelte-doctor init\n');
     runInit('.');
-    console.log('\n  Done! Agent context files generated.\n');
+    console.log('');
+    console.log('  Next steps:');
+    console.log('    CI:     Workflow runs on push/PR to main');
+    console.log('    Husky:  Add to .husky/pre-commit: sh .husky/svelte-doctor');
+    console.log('    Claude: Stop hook runs automatically after each response');
+    console.log('\n  Done! Integration configs generated.\n');
   });
 
 program.parse();
