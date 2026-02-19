@@ -1,19 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { kitRequireUseEnhance } from '../../src/rules/kit-require-use-enhance.js';
-import { analyzeFile } from '../../src/engine.js';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import { createAnalyzeFixture } from '../helpers/analyze-fixture.js';
 
-function analyzeFixture(fixtureName: string) {
-  const fixturePath = path.join(__dirname, '../fixtures', fixtureName);
-  const source = fs.readFileSync(fixturePath, 'utf-8');
-  return analyzeFile({
-    filePath: fixturePath,
-    fileRole: 'svelte-component',
-    source,
-    rules: [kitRequireUseEnhance],
-  });
-}
+const analyzeFixture = createAnalyzeFixture(kitRequireUseEnhance);
 
 describe('kit-require-use-enhance', () => {
   it('flags POST form without use:enhance', () => {

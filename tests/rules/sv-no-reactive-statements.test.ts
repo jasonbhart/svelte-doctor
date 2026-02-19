@@ -1,19 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { svNoReactiveStatements } from '../../src/rules/sv-no-reactive-statements.js';
-import { analyzeFile } from '../../src/engine.js';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import { createAnalyzeFixture } from '../helpers/analyze-fixture.js';
 
-function analyzeFixture(fixtureName: string) {
-  const fixturePath = path.join(__dirname, '../fixtures', fixtureName);
-  const source = fs.readFileSync(fixturePath, 'utf-8');
-  return analyzeFile({
-    filePath: fixturePath,
-    fileRole: 'svelte-component',
-    source,
-    rules: [svNoReactiveStatements],
-  });
-}
+const analyzeFixture = createAnalyzeFixture(svNoReactiveStatements);
 
 describe('sv-no-reactive-statements', () => {
   it('flags $: reactive assignment statements', () => {

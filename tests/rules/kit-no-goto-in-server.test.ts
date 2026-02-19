@@ -1,19 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { kitNoGotoInServer } from '../../src/rules/kit-no-goto-in-server.js';
-import { analyzeFile } from '../../src/engine.js';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import { createAnalyzeFixture } from '../helpers/analyze-fixture.js';
 
-function analyzeFixture(fixtureName: string, fileRole: 'page-server' | 'layout-server' | 'server-endpoint') {
-  const fixturePath = path.join(__dirname, '../fixtures', fixtureName);
-  const source = fs.readFileSync(fixturePath, 'utf-8');
-  return analyzeFile({
-    filePath: fixturePath,
-    fileRole,
-    source,
-    rules: [kitNoGotoInServer],
-  });
-}
+const analyzeFixture = createAnalyzeFixture(kitNoGotoInServer, 'page-server');
 
 describe('kit-no-goto-in-server', () => {
   it('flags goto import from $app/navigation in server files', () => {

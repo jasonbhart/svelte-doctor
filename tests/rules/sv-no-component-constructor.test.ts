@@ -1,19 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { svNoComponentConstructor } from '../../src/rules/sv-no-component-constructor.js';
-import { analyzeFile } from '../../src/engine.js';
+import { createAnalyzeFixture } from '../helpers/analyze-fixture.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-function analyzeFixture(fixtureName: string, fileRole: 'svelte-component' | 'lib-client' | 'lib-server' = 'lib-client') {
-  const fixturePath = path.join(__dirname, '../fixtures', fixtureName);
-  const source = fs.readFileSync(fixturePath, 'utf-8');
-  return analyzeFile({
-    filePath: fixturePath,
-    fileRole,
-    source,
-    rules: [svNoComponentConstructor],
-  });
-}
+const analyzeFixture = createAnalyzeFixture(svNoComponentConstructor, 'lib-client');
 
 describe('sv-no-component-constructor', () => {
   it('flags new App({ target: ... }) constructor pattern', () => {

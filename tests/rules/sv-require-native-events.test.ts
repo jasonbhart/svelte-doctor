@@ -1,19 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { svRequireNativeEvents } from '../../src/rules/sv-require-native-events.js';
-import { analyzeFile } from '../../src/engine.js';
+import { createAnalyzeFixture } from '../helpers/analyze-fixture.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-function analyzeFixture(fixtureName: string) {
-  const fixturePath = path.join(__dirname, '../fixtures', fixtureName);
-  const source = fs.readFileSync(fixturePath, 'utf-8');
-  return analyzeFile({
-    filePath: fixturePath,
-    fileRole: 'svelte-component',
-    source,
-    rules: [svRequireNativeEvents],
-  });
-}
+const analyzeFixture = createAnalyzeFixture(svRequireNativeEvents);
 
 describe('sv-require-native-events', () => {
   it('flags on:click directive syntax', () => {
