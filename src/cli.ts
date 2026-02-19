@@ -56,4 +56,14 @@ program
     }
   });
 
+program
+  .command('init')
+  .description('Generate agent context files (.cursorrules, Claude Code skill)')
+  .action(async () => {
+    const { runInit } = await import('./init.js');
+    console.log('\n  svelte-doctor init\n');
+    runInit('.');
+    console.log('\n  Done! Agent context files generated.\n');
+  });
+
 program.parse();
