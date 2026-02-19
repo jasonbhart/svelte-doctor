@@ -153,20 +153,61 @@ export function mergeClaudeSettings(existingJson: string): string {
 export function runInit(projectRoot: string): void {
   const resolvedRoot = path.resolve(projectRoot);
 
-  // Write .cursorrules
+  // --- Agent context files (always overwrite) ---
+
   const cursorRulesPath = path.join(resolvedRoot, '.cursorrules');
   fs.writeFileSync(cursorRulesPath, generateCursorRules(), 'utf-8');
-  console.log(`  Created ${cursorRulesPath}`);
+  console.log(`  Created ${path.relative(resolvedRoot, cursorRulesPath) || '.cursorrules'}`);
 
-  // Write .windsurfrules (same content)
   const windsurfRulesPath = path.join(resolvedRoot, '.windsurfrules');
   fs.writeFileSync(windsurfRulesPath, generateCursorRules(), 'utf-8');
-  console.log(`  Created ${windsurfRulesPath}`);
+  console.log(`  Created ${path.relative(resolvedRoot, windsurfRulesPath) || '.windsurfrules'}`);
 
-  // Write Claude Code skill
-  const claudeDir = path.join(resolvedRoot, '.claude', 'skills');
-  fs.mkdirSync(claudeDir, { recursive: true });
-  const skillPath = path.join(claudeDir, 'svelte-doctor.md');
+  const claudeSkillsDir = path.join(resolvedRoot, '.claude', 'skills');
+  fs.mkdirSync(claudeSkillsDir, { recursive: true });
+  const skillPath = path.join(claudeSkillsDir, 'svelte-doctor.md');
   fs.writeFileSync(skillPath, generateClaudeSkill(), 'utf-8');
-  console.log(`  Created ${skillPath}`);
+  console.log(`  Created ${path.relative(resolvedRoot, skillPath)}`);
+
+  // --- GitHub Actions workflow (skip if exists) ---
+
+  const workflowDir = path.join(resolvedRoot, '.github', 'workflows');
+  const workflowPath = path.join(workflowDir, 'svelte-doctor.yml');
+  if (fs.existsSync(workflowPath)) {
+    console.log(`  Skipped ${path.relative(resolvedRoot, workflowPath)} (already exists)`);
+  } else {
+    fs.mkdirSync(workflowDir, { recursive: true });
+    fs.writeFileSync(workflowPath, generateGitHubWorkflow(), 'utf-8');
+    console.log(`  Created ${path.relative(resolvedRoot, workflowPath)}`);
+  }
+
+  // --- Husky hook (skip if exists) ---
+
+  const huskyDir = path.join(resolvedRoot, '.husky');
+  const huskyPath = path.join(huskyDir, 'svelte-doctor');
+  if (fs.existsSync(huskyPath)) {
+    console.log(`  Skipped ${path.relative(resolvedRoot, huskyPath)} (already exists)`);
+  } else {
+    fs.mkdirSync(huskyDir, { recursive: true });
+    fs.writeFileSync(huskyPath, generateHuskyHook(), { mode: 0o755 });
+    console.log(`  Created ${path.relative(resolvedRoot, huskyPath)}`);
+  }
+
+  // --- Claude Code settings.json (merge) ---
+
+  const claudeSettingsPath = path.join(resolvedRoot, '.claude', 'settings.json');
+  if (fs.existsSync(claudeSettingsPath)) {
+    const existing = fs.readFileSync(claudeSettingsPath, 'utf-8');
+    const merged = mergeClaudeSettings(existing);
+    if (merged !== existing) {
+      fs.writeFileSync(claudeSettingsPath, merged, 'utf-8');
+      console.log(`  Updated ${path.relative(resolvedRoot, claudeSettingsPath)} (added Stop hook)`);
+    } else {
+      console.log(`  Skipped ${path.relative(resolvedRoot, claudeSettingsPath)} (hook already present)`);
+    }
+  } else {
+    const hookConfig = generateClaudeHook();
+    fs.writeFileSync(claudeSettingsPath, JSON.stringify(hookConfig, null, 2) + '\n', 'utf-8');
+    console.log(`  Created ${path.relative(resolvedRoot, claudeSettingsPath)}`);
+  }
 }

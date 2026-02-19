@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest';
-import { generateCursorRules, generateClaudeSkill, generateGitHubWorkflow, generateHuskyHook, generateClaudeHook, mergeClaudeSettings } from '../src/init.js';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
+import { generateCursorRules, generateClaudeSkill, generateGitHubWorkflow, generateHuskyHook, generateClaudeHook, mergeClaudeSettings, runInit } from '../src/init.js';
 
 describe('init', () => {
   it('generates .cursorrules content', () => {
@@ -81,5 +84,79 @@ describe('mergeClaudeSettings', () => {
     const result = mergeClaudeSettings(existing);
     const parsed = JSON.parse(result);
     expect(parsed.hooks.Stop).toHaveLength(1);
+  });
+});
+
+describe('runInit', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'svelte-doctor-init-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('creates all integration files in a fresh directory', () => {
+    runInit(tmpDir);
+
+    // Agent context files (existing behavior)
+    expect(fs.existsSync(path.join(tmpDir, '.cursorrules'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, '.windsurfrules'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, '.claude', 'skills', 'svelte-doctor.md'))).toBe(true);
+
+    // New integration files
+    expect(fs.existsSync(path.join(tmpDir, '.github', 'workflows', 'svelte-doctor.yml'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, '.husky', 'svelte-doctor'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, '.claude', 'settings.json'))).toBe(true);
+
+    // Verify content
+    const workflow = fs.readFileSync(path.join(tmpDir, '.github', 'workflows', 'svelte-doctor.yml'), 'utf-8');
+    expect(workflow).toContain('npx svelte-doctor . --score');
+
+    const huskyHook = fs.readFileSync(path.join(tmpDir, '.husky', 'svelte-doctor'), 'utf-8');
+    expect(huskyHook).toContain('npx svelte-doctor . --score');
+
+    const settings = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'settings.json'), 'utf-8'));
+    expect(settings.hooks.Stop[0].hooks[0].command).toContain('svelte-doctor');
+  });
+
+  it('skips GitHub workflow if already exists', () => {
+    const workflowDir = path.join(tmpDir, '.github', 'workflows');
+    fs.mkdirSync(workflowDir, { recursive: true });
+    fs.writeFileSync(path.join(workflowDir, 'svelte-doctor.yml'), 'custom workflow', 'utf-8');
+
+    runInit(tmpDir);
+
+    const workflow = fs.readFileSync(path.join(workflowDir, 'svelte-doctor.yml'), 'utf-8');
+    expect(workflow).toBe('custom workflow');
+  });
+
+  it('skips Husky hook if already exists', () => {
+    const huskyDir = path.join(tmpDir, '.husky');
+    fs.mkdirSync(huskyDir, { recursive: true });
+    fs.writeFileSync(path.join(huskyDir, 'svelte-doctor'), 'custom hook', 'utf-8');
+
+    runInit(tmpDir);
+
+    const hook = fs.readFileSync(path.join(huskyDir, 'svelte-doctor'), 'utf-8');
+    expect(hook).toBe('custom hook');
+  });
+
+  it('merges into existing .claude/settings.json', () => {
+    const claudeDir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(claudeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(claudeDir, 'settings.json'),
+      JSON.stringify({ permissions: { allow: ['Read'] } }, null, 2),
+      'utf-8'
+    );
+
+    runInit(tmpDir);
+
+    const settings = JSON.parse(fs.readFileSync(path.join(claudeDir, 'settings.json'), 'utf-8'));
+    expect(settings.permissions.allow).toContain('Read');
+    expect(settings.hooks.Stop).toBeDefined();
   });
 });
