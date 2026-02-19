@@ -12,7 +12,6 @@ import { svNoStaleDerivedLet } from './sv-no-stale-derived-let.js';
 import { svRequireBindableRune } from './sv-require-bindable-rune.js';
 import { svReactivityLossPrimitive } from './sv-reactivity-loss-primitive.js';
 import { svNoMagicProps } from './sv-no-magic-props.js';
-import { svRequireSnippetInvocation } from './sv-require-snippet-invocation.js';
 import { svNoSvelteComponent } from './sv-no-svelte-component.js';
 // SvelteKit rules (kit-*)
 import { kitNoSharedServerState } from './kit-no-shared-server-state.js';
@@ -40,7 +39,6 @@ export const allRules: Rule[] = [
   svRequireBindableRune,
   svReactivityLossPrimitive,
   svNoMagicProps,
-  svRequireSnippetInvocation,
   svNoSvelteComponent,
   // SvelteKit rules (kit-*)
   kitNoSharedServerState,
@@ -67,7 +65,6 @@ export {
   svRequireBindableRune,
   svReactivityLossPrimitive,
   svNoMagicProps,
-  svRequireSnippetInvocation,
   svNoSvelteComponent,
   kitNoSharedServerState,
   kitServerOnlySecrets,
