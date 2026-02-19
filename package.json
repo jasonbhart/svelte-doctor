@@ -1,0 +1,46 @@
+{
+  "name": "svelte-doctor",
+  "version": "0.0.1",
+  "description": "Diagnose and fix Svelte 5 anti-patterns in your codebase",
+  "type": "module",
+  "bin": {
+    "svelte-doctor": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/cli.d.ts",
+      "default": "./dist/cli.js"
+    },
+    "./api": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "dev": "tsdown --watch",
+    "build": "rm -rf dist && NODE_ENV=production tsdown",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "commander": "^14.0.0",
+    "estree-walker": "^3.0.3",
+    "fast-glob": "^3.3.0",
+    "magic-string": "^0.30.0",
+    "ora": "^8.0.0",
+    "oxc-parser": "^0.112.0",
+    "picocolors": "^1.1.0"
+  },
+  "devDependencies": {
+    "svelte": "^5.0.0",
+    "tsdown": "^0.20.0",
+    "typescript": "^5.5.0",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT"
+}
