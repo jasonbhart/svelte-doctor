@@ -16,6 +16,31 @@ describe('sv-prefer-derived-over-effect', () => {
     expect(diagnostics).toHaveLength(0);
   });
 
+  it('suppresses for $bindable variable synced via effect', () => {
+    const diagnostics = analyzeFixture('effect-bindable-sync.svelte');
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('suppresses when variable is also written by event handlers', () => {
+    const diagnostics = analyzeFixture('effect-multi-write.svelte');
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('suppresses for async effects', () => {
+    const diagnostics = analyzeFixture('effect-async.svelte');
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('suppresses for effects with cleanup return', () => {
+    const diagnostics = analyzeFixture('effect-cleanup.svelte');
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('suppresses when variable is also mutated via UpdateExpression in handler', () => {
+    const diagnostics = analyzeFixture('effect-update-expr-handler.svelte');
+    expect(diagnostics).toHaveLength(0);
+  });
+
   it('is not fixable', () => {
     expect(svPreferDerivedOverEffect.fix).toBeUndefined();
   });

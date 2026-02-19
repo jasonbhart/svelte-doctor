@@ -6,11 +6,16 @@
   // sv-reactivity-loss-primitive: reactive var passed to plain function call
   let formatted = String(myProp);
 
-  // sv-no-effect-state-mutation: $state var mutated inside $effect
-  // sv-prefer-derived-over-effect: $effect with single assignment
+  // sv-prefer-derived-over-effect: $effect with single assignment (effectVal not written elsewhere)
   let effectVal = $state(0);
   $effect(() => {
     effectVal = myProp * 2;
+  });
+
+  // sv-no-effect-state-mutation: $state var both read AND written in $effect (genuine loop risk)
+  let loopVar = $state(0);
+  $effect(() => {
+    loopVar = loopVar + 1;
   });
 
   // sv-require-bindable-rune: prop mutated without $bindable()
@@ -29,4 +34,4 @@
   ]);
 </script>
 
-<div>{staleVal} {formatted} {effectVal} {computedVal} {bigList.length}</div>
+<div>{staleVal} {formatted} {effectVal} {loopVar} {computedVal} {bigList.length}</div>
