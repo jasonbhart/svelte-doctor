@@ -102,6 +102,54 @@ export function generateHuskyHook(): string {
   return `npx svelte-doctor . --score\n`;
 }
 
+export interface ClaudeHookConfig {
+  hooks: {
+    Stop: Array<{
+      hooks: Array<{
+        type: string;
+        command: string;
+      }>;
+    }>;
+  };
+}
+
+export function generateClaudeHook(): ClaudeHookConfig {
+  return {
+    hooks: {
+      Stop: [
+        {
+          hooks: [
+            {
+              type: 'command',
+              command: 'npx svelte-doctor . --agent 2>/dev/null || true',
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+export function mergeClaudeSettings(existingJson: string): string {
+  const existing = JSON.parse(existingJson);
+  const hookConfig = generateClaudeHook();
+
+  // If Stop hook already contains svelte-doctor, don't duplicate
+  if (existing.hooks?.Stop?.some((entry: any) =>
+    entry.hooks?.some((h: any) => h.command?.includes('svelte-doctor'))
+  )) {
+    return JSON.stringify(existing, null, 2) + '\n';
+  }
+
+  // Merge hooks key, preserving existing hooks
+  existing.hooks = {
+    ...existing.hooks,
+    ...hookConfig.hooks,
+  };
+
+  return JSON.stringify(existing, null, 2) + '\n';
+}
+
 export function runInit(projectRoot: string): void {
   const resolvedRoot = path.resolve(projectRoot);
 
