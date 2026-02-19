@@ -8,6 +8,22 @@ export const svNoComponentConstructor: Rule = {
   description: 'Flags legacy `new Component({ target })` constructor pattern.',
   agentPrompt:
     'Svelte 5 removes the class-based component constructor. Use `import { mount } from \'svelte\'; mount(Component, { target })` instead of `new Component({ target })`.',
+  fix: (source) => {
+    // Replace: new ComponentName({ → mount(ComponentName, {
+    const result = source.replace(
+      /new\s+(\w+)\s*\(\s*\{/g,
+      'mount($1, {'
+    );
+
+    if (result === source) return null;
+
+    // Add import { mount } from 'svelte' if not already present
+    if (!result.includes("import { mount }") && !result.includes("import {mount}")) {
+      return `import { mount } from 'svelte';\n${result}`;
+    }
+
+    return result;
+  },
   analyze: (ast, context) => {
     // For Svelte files, walk ast.instance.content; for TS/JS files, walk ast.body
     const root = ast.instance?.content ?? ast;
