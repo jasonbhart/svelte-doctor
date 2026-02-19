@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateCursorRules, generateClaudeSkill, generateGitHubWorkflow } from '../src/init.js';
+import { generateCursorRules, generateClaudeSkill, generateGitHubWorkflow, generateHuskyHook } from '../src/init.js';
 
 describe('init', () => {
   it('generates .cursorrules content', () => {
@@ -27,5 +27,14 @@ describe('generateGitHubWorkflow', () => {
     expect(content).toContain('npm ci');
     expect(content).toContain('actions/checkout@v4');
     expect(content).toContain('actions/setup-node@v4');
+  });
+});
+
+describe('generateHuskyHook', () => {
+  it('generates a husky-compatible hook script', () => {
+    const content = generateHuskyHook();
+    expect(content).toContain('npx svelte-doctor . --score');
+    // Must NOT have a shebang — husky v9 hooks are plain scripts
+    expect(content).not.toMatch(/^#!/);
   });
 });

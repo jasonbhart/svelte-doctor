@@ -97,6 +97,11 @@ jobs:
 `;
 }
 
+
+export function generateHuskyHook(): string {
+  return `npx svelte-doctor . --score\n`;
+}
+
 export function runInit(projectRoot: string): void {
   const resolvedRoot = path.resolve(projectRoot);
 
