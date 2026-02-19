@@ -46,42 +46,43 @@ export const svNoStaleDerivedLet: Rule = {
 
     if (reactiveVars.size === 0) return;
 
-    // Step 2: Find let declarations (not $derived, not $state, not $props) that reference reactive vars
-    walk(ast.instance.content, {
-      enter(node: any) {
-        if (node.type === 'VariableDeclaration' && node.kind === 'let') {
-          for (const decl of node.declarations) {
-            // Skip $derived, $state, $props calls
-            if (
-              decl.init?.type === 'CallExpression' &&
-              ['$derived', '$state', '$props', '$bindable'].includes(decl.init.callee?.name)
-            ) {
-              continue;
-            }
+    // Step 2: Find top-level let declarations (not inside functions/loops) that reference reactive vars
+    const body = ast.instance.content?.body;
+    if (!body) return;
 
-            // Skip declarations without an init expression
-            if (!decl.init || decl.id?.type !== 'Identifier') continue;
+    for (const stmt of body) {
+      if (stmt.type !== 'VariableDeclaration' || stmt.kind !== 'let') continue;
 
-            // Check if init references any reactive variable
-            const referencedReactiveVars: string[] = [];
-            walk(decl.init, {
-              enter(inner: any) {
-                if (inner.type === 'Identifier' && reactiveVars.has(inner.name)) {
-                  referencedReactiveVars.push(inner.name);
-                }
-              },
-            });
-
-            if (referencedReactiveVars.length > 0) {
-              context.report({
-                node: decl,
-                message: `\`let ${decl.id.name}\` derives from reactive variable(s) \`${referencedReactiveVars.join(', ')}\` but will not update reactively. Use \`let ${decl.id.name} = $derived(expr)\` instead.`,
-              });
-            }
-          }
+      for (const decl of stmt.declarations) {
+        // Skip $derived, $state, $props calls
+        if (
+          decl.init?.type === 'CallExpression' &&
+          ['$derived', '$state', '$props', '$bindable'].includes(decl.init.callee?.name)
+        ) {
+          continue;
         }
-      },
-    });
+
+        // Skip declarations without an init expression
+        if (!decl.init || decl.id?.type !== 'Identifier') continue;
+
+        // Check if init references any reactive variable
+        const referencedReactiveVars: string[] = [];
+        walk(decl.init, {
+          enter(inner: any) {
+            if (inner.type === 'Identifier' && reactiveVars.has(inner.name)) {
+              referencedReactiveVars.push(inner.name);
+            }
+          },
+        });
+
+        if (referencedReactiveVars.length > 0) {
+          context.report({
+            node: decl,
+            message: `\`let ${decl.id.name}\` derives from reactive variable(s) \`${referencedReactiveVars.join(', ')}\` but will not update reactively. Use \`let ${decl.id.name} = $derived(expr)\` instead.`,
+          });
+        }
+      }
+    }
   },
   fix: (source, _diagnostic) => {
     // Heuristic fix: find `let x = <expr>` where expr does not start with $derived/$state/$props

@@ -3,11 +3,11 @@ import type { Rule } from '../types.js';
 
 export const svNoEffectStateMutation: Rule = {
   id: 'sv-no-effect-state-mutation',
-  severity: 'error',
+  severity: 'warning',
   applicableTo: ['svelte-component'],
-  description: 'Flags $state variables mutated inside $effect() (infinite re-render risk).',
+  description: 'Flags $state variables mutated inside $effect() without untrack().',
   agentPrompt:
-    'Do NOT mutate `$state` variables inside `$effect()`. Use `$derived()` instead. If mutation is truly necessary, wrap in `untrack(() => { ... })`.',
+    'Mutating `$state` inside `$effect()` can cause infinite re-renders if the mutated variable is also read by the effect. Consider: (1) Use `$derived()` if the value is purely computed. (2) Use `untrack(() => { ... })` if mutation is intentional. (3) Guard with a condition to prevent re-triggering.',
   analyze: (ast, context) => {
     if (!ast.instance) return;
 
@@ -45,9 +45,32 @@ export const svNoEffectStateMutation: Rule = {
         ) {
           const effectBody = node.expression.arguments[0];
 
-          // Walk the effect callback body
+          // Check if the entire effect body is wrapped in untrack()
+          let isUntracked = false;
+          if (effectBody.type === 'ArrowFunctionExpression' && effectBody.body?.type === 'BlockStatement') {
+            const stmts = effectBody.body.body;
+            if (stmts?.length === 1 &&
+              stmts[0].type === 'ExpressionStatement' &&
+              stmts[0].expression?.type === 'CallExpression' &&
+              stmts[0].expression.callee?.name === 'untrack') {
+              isUntracked = true;
+            }
+          }
+          if (isUntracked) return;
+
+          // Walk the effect callback body, but skip nested untrack() calls
           walk(effectBody, {
             enter(inner: any) {
+              // Skip inside untrack() blocks
+              if (
+                inner.type === 'CallExpression' &&
+                inner.callee?.type === 'Identifier' &&
+                inner.callee.name === 'untrack'
+              ) {
+                this.skip();
+                return;
+              }
+
               if (
                 inner.type === 'AssignmentExpression' &&
                 inner.left?.type === 'Identifier' &&
@@ -55,7 +78,7 @@ export const svNoEffectStateMutation: Rule = {
               ) {
                 context.report({
                   node: inner,
-                  message: `\`$state\` variable \`${inner.left.name}\` is mutated inside \`$effect()\`. This can cause infinite re-renders. Use \`$derived()\` instead.`,
+                  message: `\`$state\` variable \`${inner.left.name}\` is mutated inside \`$effect()\`. If this is intentional, wrap in \`untrack()\` to prevent re-triggering. If the value is purely computed, use \`$derived()\` instead.`,
                 });
               }
             },

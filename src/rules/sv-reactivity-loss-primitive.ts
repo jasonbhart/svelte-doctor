@@ -39,25 +39,50 @@ export const svReactivityLossPrimitive: Rule = {
 
     if (propsVars.size === 0) return;
 
-    // Step 2: Find function calls in the script (not template) that pass $props vars directly
-    walk(ast.instance.content, {
-      enter(node: any) {
-        if (
-          node.type === 'CallExpression' &&
-          node.callee?.type === 'Identifier' &&
-          // Skip reactive runes — they handle reactivity correctly
-          !['$derived', '$effect', '$state', '$props', '$bindable', '$inspect'].includes(node.callee.name)
-        ) {
-          for (const arg of node.arguments ?? []) {
-            if (arg.type === 'Identifier' && propsVars.has(arg.name)) {
-              context.report({
-                node: arg,
-                message: `Prop \`${arg.name}\` passed directly to \`${node.callee.name}()\` may lose reactivity. Wrap in a getter \`() => ${arg.name}\` or use \`$derived()\`.`,
-              });
+    // Reactive rune names that handle reactivity correctly
+    const REACTIVE_RUNES = new Set([
+      '$derived', '$effect', '$state', '$props', '$bindable', '$inspect',
+    ]);
+
+    // Step 2: Find function calls at top-level scope only (not inside functions,
+    // $derived, or $effect which already handle reactivity)
+    // Only walk the top-level body statements of the script block
+    const body = ast.instance.content?.body;
+    if (!body) return;
+
+    for (const stmt of body) {
+      // Only check top-level VariableDeclaration initializers like:
+      //   let result = fn(propVar)
+      if (stmt.type === 'VariableDeclaration') {
+        for (const decl of stmt.declarations) {
+          if (!decl.init) continue;
+
+          // Skip if the init is a reactive rune call (e.g. $derived(fn(prop)))
+          if (
+            decl.init.type === 'CallExpression' &&
+            decl.init.callee?.type === 'Identifier' &&
+            REACTIVE_RUNES.has(decl.init.callee.name)
+          ) {
+            continue;
+          }
+
+          // Check if init is a plain function call with a prop argument
+          if (
+            decl.init.type === 'CallExpression' &&
+            decl.init.callee?.type === 'Identifier' &&
+            !REACTIVE_RUNES.has(decl.init.callee.name)
+          ) {
+            for (const arg of decl.init.arguments ?? []) {
+              if (arg.type === 'Identifier' && propsVars.has(arg.name)) {
+                context.report({
+                  node: arg,
+                  message: `Prop \`${arg.name}\` passed directly to \`${decl.init.callee.name}()\` captures its current value, losing reactivity. Wrap in \`$derived()\`: \`let ${decl.id?.name ?? 'x'} = $derived(${decl.init.callee.name}(${arg.name}))\`.`,
+                });
+              }
             }
           }
         }
-      },
-    });
+      }
+    }
   },
 };
