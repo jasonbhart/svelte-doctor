@@ -7,7 +7,7 @@ const analyzeFixture = createAnalyzeFixture(perfPreferStateRaw);
 describe('perf-prefer-state-raw', () => {
   it('flags $state() with large array or object literal', () => {
     const diagnostics = analyzeFixture('large-state.svelte');
-    expect(diagnostics.length).toBeGreaterThanOrEqual(2); // items (>20 elements) + config (>10 properties)
+    expect(diagnostics).toHaveLength(2); // items (>20 elements) + config (>10 properties)
   });
 
   it('passes small $state or $state.raw usage', () => {

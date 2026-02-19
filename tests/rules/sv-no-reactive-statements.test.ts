@@ -8,7 +8,7 @@ describe('sv-no-reactive-statements', () => {
   it('flags $: reactive assignment statements', () => {
     const diagnostics = analyzeFixture('legacy-reactive.svelte');
     const reactiveIssues = diagnostics.filter((d) => d.message.includes('$:'));
-    expect(reactiveIssues.length).toBeGreaterThanOrEqual(2); // $: doubled = ... and $: { block }
+    expect(reactiveIssues).toHaveLength(2); // $: doubled = ... and $: { block }
   });
 
   it('passes clean $derived and $effect code', () => {

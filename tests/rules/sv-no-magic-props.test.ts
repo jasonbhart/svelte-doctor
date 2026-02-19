@@ -7,7 +7,7 @@ const analyzeFixture = createAnalyzeFixture(svNoMagicProps);
 describe('sv-no-magic-props', () => {
   it('flags $$props and $$restProps usage', () => {
     const diagnostics = analyzeFixture('magic-props.svelte');
-    expect(diagnostics.length).toBeGreaterThanOrEqual(2); // $$restProps + $$props
+    expect(diagnostics).toHaveLength(2); // $$restProps + $$props
   });
 
   it('passes clean $props() destructuring', () => {

@@ -10,7 +10,7 @@ describe('sv-no-export-let', () => {
   it('flags export let declarations', () => {
     const diagnostics = analyzeFixture('legacy-props.svelte');
     const propIssues = diagnostics.filter((d) => d.message.includes('export let'));
-    expect(propIssues.length).toBeGreaterThanOrEqual(1);
+    expect(propIssues).toHaveLength(2);
   });
 
   it('passes clean Svelte 5 runes code', () => {

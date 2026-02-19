@@ -7,7 +7,7 @@ const analyzeFixture = createAnalyzeFixture(svPreferDerivedOverEffect);
 describe('sv-prefer-derived-over-effect', () => {
   it('flags $effect that only assigns a single variable', () => {
     const diagnostics = analyzeFixture('effect-as-derived.svelte');
-    expect(diagnostics.length).toBeGreaterThanOrEqual(1);
+    expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0].message).toContain('$derived');
   });
 

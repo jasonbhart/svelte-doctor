@@ -7,7 +7,7 @@ const analyzeFixture = createAnalyzeFixture(svNoStaleDerivedLet);
 describe('sv-no-stale-derived-let', () => {
   it('flags let declarations that derive from $props() variables', () => {
     const diagnostics = analyzeFixture('stale-let.svelte');
-    expect(diagnostics.length).toBeGreaterThanOrEqual(2); // doubled and sum
+    expect(diagnostics).toHaveLength(2); // doubled and sum
     expect(diagnostics[0].message).toContain('$derived');
   });
 

@@ -7,7 +7,7 @@ const analyzeFixture = createAnalyzeFixture(kitNoGotoInServer, 'page-server');
 describe('kit-no-goto-in-server', () => {
   it('flags goto import from $app/navigation in server files', () => {
     const diagnostics = analyzeFixture('goto-in-server.ts', 'page-server');
-    expect(diagnostics.length).toBeGreaterThanOrEqual(1);
+    expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0].message).toContain('goto');
   });
 

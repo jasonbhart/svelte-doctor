@@ -19,7 +19,7 @@ describe('diagnose API', () => {
     const result = await diagnose(tmpDir);
 
     expect(result.filesScanned).toBe(1);
-    expect(result.diagnostics.length).toBeGreaterThan(0);
+    expect(result.diagnostics.length).toBe(1);
     expect(result.score.score).toBeLessThan(100);
 
     fs.rmSync(tmpDir, { recursive: true });

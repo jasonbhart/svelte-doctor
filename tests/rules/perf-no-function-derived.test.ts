@@ -7,7 +7,7 @@ const analyzeFixture = createAnalyzeFixture(perfNoFunctionDerived);
 describe('perf-no-function-derived', () => {
   it('flags $derived(() => expr) with arrow function expression body', () => {
     const diagnostics = analyzeFixture('function-derived.svelte');
-    expect(diagnostics.length).toBeGreaterThanOrEqual(2); // doubled + tripled
+    expect(diagnostics).toHaveLength(2); // doubled + tripled
     expect(diagnostics[0].message).toContain('$derived');
   });
 

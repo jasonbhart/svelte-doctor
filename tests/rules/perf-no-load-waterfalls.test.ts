@@ -7,7 +7,7 @@ const analyzeFixture = createAnalyzeFixture(perfNoLoadWaterfalls, 'page-server')
 describe('perf-no-load-waterfalls', () => {
   it('flags sequential independent awaits in load()', () => {
     const diagnostics = analyzeFixture('load-waterfall.ts');
-    expect(diagnostics.length).toBeGreaterThanOrEqual(1);
+    expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0].message).toContain('waterfall');
   });
 

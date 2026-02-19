@@ -20,6 +20,6 @@ describe('parseTypeScript', () => {
     const result = parseTypeScript(source, 'test.js');
 
     expect(result).toBeDefined();
-    expect(result.program.body.length).toBeGreaterThan(0);
+    expect(result.program.body.length).toBe(1);
   });
 });

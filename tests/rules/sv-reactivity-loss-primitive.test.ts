@@ -7,7 +7,7 @@ const analyzeFixture = createAnalyzeFixture(svReactivityLossPrimitive);
 describe('sv-reactivity-loss-primitive', () => {
   it('flags $props variable passed directly as function argument', () => {
     const diagnostics = analyzeFixture('reactivity-loss.svelte');
-    expect(diagnostics.length).toBeGreaterThanOrEqual(1);
+    expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0].message).toContain('reactivity');
   });
 

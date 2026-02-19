@@ -9,7 +9,7 @@ const analyzeFixture = createAnalyzeFixture(svNoComponentConstructor, 'lib-clien
 describe('sv-no-component-constructor', () => {
   it('flags new App({ target: ... }) constructor pattern', () => {
     const diagnostics = analyzeFixture('legacy-constructor.ts');
-    expect(diagnostics.length).toBeGreaterThanOrEqual(1);
+    expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0].message).toContain('constructor');
   });
 

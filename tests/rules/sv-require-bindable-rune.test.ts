@@ -7,7 +7,7 @@ const analyzeFixture = createAnalyzeFixture(svRequireBindableRune);
 describe('sv-require-bindable-rune', () => {
   it('flags assignment to $props() variable without $bindable', () => {
     const diagnostics = analyzeFixture('prop-mutation.svelte');
-    expect(diagnostics.length).toBeGreaterThanOrEqual(1);
+    expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0].message).toContain('$bindable');
   });
 

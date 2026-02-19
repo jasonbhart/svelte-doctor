@@ -7,7 +7,7 @@ const analyzeFixture = createAnalyzeFixture(svNoEventDispatcher);
 describe('sv-no-event-dispatcher', () => {
   it('flags createEventDispatcher import', () => {
     const diagnostics = analyzeFixture('legacy-dispatcher.svelte');
-    expect(diagnostics.length).toBeGreaterThanOrEqual(1);
+    expect(diagnostics).toHaveLength(2);
     expect(diagnostics[0].message).toContain('createEventDispatcher');
   });
 
