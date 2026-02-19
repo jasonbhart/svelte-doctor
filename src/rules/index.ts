@@ -8,15 +8,23 @@ import { kitNoSharedServerState } from './kit-no-shared-server-state.js';
 import { kitServerOnlySecrets } from './kit-server-only-secrets.js';
 import { kitRequireUseEnhance } from './kit-require-use-enhance.js';
 import { perfNoLoadWaterfalls } from './perf-no-load-waterfalls.js';
+// Rules from Task 23
+import { svNoReactiveStatements } from './sv-no-reactive-statements.js';
+// Rules from Task 24
+import { svNoEventModifiers } from './sv-no-event-modifiers.js';
+import { svNoComponentConstructor } from './sv-no-component-constructor.js';
 import type { Rule } from '../types.js';
 
 export const allRules: Rule[] = [
   // Migration rules (sv-*)
   svNoExportLet,
+  svNoReactiveStatements,
   svNoEffectStateMutation,
   svPreferSnippets,
   svNoEventDispatcher,
   svRequireNativeEvents,
+  svNoEventModifiers,
+  svNoComponentConstructor,
   // SvelteKit rules (kit-*)
   kitNoSharedServerState,
   kitServerOnlySecrets,
@@ -27,10 +35,13 @@ export const allRules: Rule[] = [
 
 export {
   svNoExportLet,
+  svNoReactiveStatements,
   svNoEffectStateMutation,
   svPreferSnippets,
   svNoEventDispatcher,
   svRequireNativeEvents,
+  svNoEventModifiers,
+  svNoComponentConstructor,
   kitNoSharedServerState,
   kitServerOnlySecrets,
   kitRequireUseEnhance,
