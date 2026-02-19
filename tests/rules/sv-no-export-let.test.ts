@@ -32,4 +32,16 @@ describe('sv-no-export-let', () => {
     expect(svNoExportLet.severity).toBe('error');
     expect(svNoExportLet.applicableTo).toContain('svelte-component');
   });
+
+  it('fixes export let props to $props() destructuring', () => {
+    const fixturePath = path.join(__dirname, '../fixtures/legacy-props.svelte');
+    const source = fs.readFileSync(fixturePath, 'utf-8');
+    const fixed = svNoExportLet.fix!(source, {} as any);
+    expect(fixed).not.toBeNull();
+    expect(fixed).toContain('$props()');
+    expect(fixed).not.toContain('export let');
+    // Should merge into single destructuring: let { name, count = 0 } = $props();
+    expect(fixed).toContain('name');
+    expect(fixed).toContain('count = 0');
+  });
 });
