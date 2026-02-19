@@ -4,7 +4,7 @@
 
 **Goal:** Build a deterministic CLI diagnostic tool that scans Svelte 5 / SvelteKit codebases for legacy patterns, architectural violations, and performance anti-patterns, producing a 0-100 health score with actionable diagnostics.
 
-**Architecture:** Monolithic CLI with a four-stage pipeline: File Scanner (fast-glob) -> Parser (svelte/compiler for .svelte, oxc-parser for .ts/.js) -> Rule Engine (estree-walker, 9 rules) -> Reporter/Fixer. Each file is classified by its SvelteKit routing role (FileRole) to determine which rules apply.
+**Architecture:** Monolithic CLI with a four-stage pipeline: File Scanner (fast-glob) -> Parser (svelte/compiler for .svelte, oxc-parser for .ts/.js) -> Rule Engine (estree-walker, 22 rules) -> Reporter/Fixer. Each file is classified by its SvelteKit routing role (FileRole) to determine which rules apply.
 
 **Tech Stack:** TypeScript, commander, svelte/compiler, oxc-parser, estree-walker, magic-string, fast-glob, picocolors, ora, vitest, tsdown
 
@@ -272,10 +272,10 @@ describe('loadConfig', () => {
       String(p).endsWith('svelte-doctor.config.json')
     );
     vi.spyOn(fs, 'readFileSync').mockReturnValue(
-      JSON.stringify({ ignore: { rules: ['sv-require-runes'] } })
+      JSON.stringify({ ignore: { rules: ['sv-no-export-let'] } })
     );
     const config = loadConfig('/fake/project');
-    expect(config.ignore?.rules).toEqual(['sv-require-runes']);
+    expect(config.ignore?.rules).toEqual(['sv-no-export-let']);
   });
 
   it('falls back to package.json svelteDoctor key', () => {
@@ -922,13 +922,12 @@ git commit -m "feat: add scoring algorithm and rule engine"
 
 ---
 
-### Task 7: Rule — sv-require-runes
+### Task 7: Rule — sv-no-export-let
 
 **Files:**
-- Create: `src/rules/sv-require-runes.ts`
-- Create: `tests/rules/sv-require-runes.test.ts`
+- Create: `src/rules/sv-no-export-let.ts`
+- Create: `tests/rules/sv-no-export-let.test.ts`
 - Create: `tests/fixtures/legacy-props.svelte`
-- Create: `tests/fixtures/legacy-reactive.svelte`
 - Create: `tests/fixtures/clean-runes.svelte`
 
 **Step 1: Create test fixtures**
@@ -941,19 +940,6 @@ git commit -m "feat: add scoring algorithm and rule engine"
 </script>
 
 <p>{name}: {count}</p>
-```
-
-`tests/fixtures/legacy-reactive.svelte`:
-```svelte
-<script>
-  let count = 0;
-  $: doubled = count * 2;
-  $: {
-    console.log(count);
-  }
-</script>
-
-<p>{doubled}</p>
 ```
 
 `tests/fixtures/clean-runes.svelte`:
@@ -970,7 +956,7 @@ git commit -m "feat: add scoring algorithm and rule engine"
 
 ```typescript
 import { describe, it, expect } from 'vitest';
-import { svRequireRunes } from '../../src/rules/sv-require-runes.js';
+import { svNoExportLet } from '../../src/rules/sv-no-export-let.js';
 import { analyzeFile } from '../../src/engine.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -982,21 +968,15 @@ function analyzeFixture(fixtureName: string) {
     filePath: fixturePath,
     fileRole: 'svelte-component',
     source,
-    rules: [svRequireRunes],
+    rules: [svNoExportLet],
   });
 }
 
-describe('sv-require-runes', () => {
+describe('sv-no-export-let', () => {
   it('flags export let declarations', () => {
     const diagnostics = analyzeFixture('legacy-props.svelte');
     const propIssues = diagnostics.filter((d) => d.message.includes('export let'));
     expect(propIssues.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('flags $: reactive statements', () => {
-    const diagnostics = analyzeFixture('legacy-reactive.svelte');
-    const reactiveIssues = diagnostics.filter((d) => d.message.includes('$:'));
-    expect(reactiveIssues.length).toBeGreaterThanOrEqual(1);
   });
 
   it('passes clean Svelte 5 runes code', () => {
@@ -1005,16 +985,16 @@ describe('sv-require-runes', () => {
   });
 
   it('has correct metadata', () => {
-    expect(svRequireRunes.id).toBe('sv-require-runes');
-    expect(svRequireRunes.severity).toBe('error');
-    expect(svRequireRunes.applicableTo).toContain('svelte-component');
+    expect(svNoExportLet.id).toBe('sv-no-export-let');
+    expect(svNoExportLet.severity).toBe('error');
+    expect(svNoExportLet.applicableTo).toContain('svelte-component');
   });
 });
 ```
 
 **Step 3: Run test to verify it fails**
 
-Run: `npx vitest run tests/rules/sv-require-runes.test.ts`
+Run: `npx vitest run tests/rules/sv-no-export-let.test.ts`
 Expected: FAIL — cannot resolve rule module.
 
 **Step 4: Implement the rule**
@@ -1023,13 +1003,13 @@ Expected: FAIL — cannot resolve rule module.
 import { walk } from 'estree-walker';
 import type { Rule } from '../types.js';
 
-export const svRequireRunes: Rule = {
-  id: 'sv-require-runes',
+export const svNoExportLet: Rule = {
+  id: 'sv-no-export-let',
   severity: 'error',
   applicableTo: ['svelte-component'],
-  description: 'Flags legacy Svelte 4 export let props and $: reactive statements.',
+  description: 'Flags legacy Svelte 4 export let props.',
   agentPrompt:
-    'This is Svelte 5. Replace all `export let` props with a single `let { ...props } = $props()` destructuring. Replace all `$:` reactive statements with `$derived()` for computed values or `$effect()` for side effects.',
+    'This is Svelte 5. Replace all `export let` props with a single `let { ...props } = $props()` destructuring.',
   analyze: (ast, context) => {
     if (!ast.instance) return;
 
@@ -1047,15 +1027,6 @@ export const svRequireRunes: Rule = {
               'Legacy Svelte 4 `export let` prop detected. Use `let { prop } = $props()` instead.',
           });
         }
-
-        // Detect: $: reactive statement
-        if (node.type === 'LabeledStatement' && node.label?.name === '$') {
-          context.report({
-            node,
-            message:
-              'Legacy Svelte 4 `$:` reactive statement detected. Use `$derived()` or `$effect()` instead.',
-          });
-        }
       },
     });
   },
@@ -1064,14 +1035,14 @@ export const svRequireRunes: Rule = {
 
 **Step 5: Run test to verify it passes**
 
-Run: `npx vitest run tests/rules/sv-require-runes.test.ts`
-Expected: All 4 tests pass.
+Run: `npx vitest run tests/rules/sv-no-export-let.test.ts`
+Expected: All 3 tests pass.
 
 **Step 6: Commit**
 
 ```bash
-git add src/rules/sv-require-runes.ts tests/rules/sv-require-runes.test.ts tests/fixtures/legacy-props.svelte tests/fixtures/legacy-reactive.svelte tests/fixtures/clean-runes.svelte
-git commit -m "feat: add sv-require-runes rule (detects export let and $:)"
+git add src/rules/sv-no-export-let.ts tests/rules/sv-no-export-let.test.ts tests/fixtures/legacy-props.svelte tests/fixtures/clean-runes.svelte
+git commit -m "feat: add sv-no-export-let rule (detects legacy export let props)"
 ```
 
 ---
@@ -1520,11 +1491,11 @@ git commit -m "feat: add sv-no-event-dispatcher rule"
 
 ---
 
-### Task 11: Rule — sv-no-legacy-event-syntax
+### Task 11: Rule — sv-require-native-events
 
 **Files:**
-- Create: `src/rules/sv-no-legacy-event-syntax.ts`
-- Create: `tests/rules/sv-no-legacy-event-syntax.test.ts`
+- Create: `src/rules/sv-require-native-events.ts`
+- Create: `tests/rules/sv-require-native-events.test.ts`
 - Create: `tests/fixtures/legacy-events.svelte`
 - Create: `tests/fixtures/clean-events.svelte`
 
@@ -1556,7 +1527,7 @@ git commit -m "feat: add sv-no-event-dispatcher rule"
 
 ```typescript
 import { describe, it, expect } from 'vitest';
-import { svNoLegacyEventSyntax } from '../../src/rules/sv-no-legacy-event-syntax.js';
+import { svRequireNativeEvents } from '../../src/rules/sv-require-native-events.js';
 import { analyzeFile } from '../../src/engine.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -1568,11 +1539,11 @@ function analyzeFixture(fixtureName: string) {
     filePath: fixturePath,
     fileRole: 'svelte-component',
     source,
-    rules: [svNoLegacyEventSyntax],
+    rules: [svRequireNativeEvents],
   });
 }
 
-describe('sv-no-legacy-event-syntax', () => {
+describe('sv-require-native-events', () => {
   it('flags on:click directive syntax', () => {
     const diagnostics = analyzeFixture('legacy-events.svelte');
     expect(diagnostics.length).toBe(2); // on:click + on:keydown
@@ -1588,7 +1559,7 @@ describe('sv-no-legacy-event-syntax', () => {
 
 **Step 3: Run test to verify it fails**
 
-Run: `npx vitest run tests/rules/sv-no-legacy-event-syntax.test.ts`
+Run: `npx vitest run tests/rules/sv-require-native-events.test.ts`
 Expected: FAIL
 
 **Step 4: Implement the rule**
@@ -1599,8 +1570,8 @@ Walk the template AST looking for `OnDirective` nodes.
 import { walk } from 'estree-walker';
 import type { Rule } from '../types.js';
 
-export const svNoLegacyEventSyntax: Rule = {
-  id: 'sv-no-legacy-event-syntax',
+export const svRequireNativeEvents: Rule = {
+  id: 'sv-require-native-events',
   severity: 'warning',
   applicableTo: ['svelte-component'],
   description: 'Flags on:event directive syntax. Use onevent attributes instead.',
@@ -1625,14 +1596,14 @@ export const svNoLegacyEventSyntax: Rule = {
 
 **Step 5: Run test to verify it passes**
 
-Run: `npx vitest run tests/rules/sv-no-legacy-event-syntax.test.ts`
+Run: `npx vitest run tests/rules/sv-require-native-events.test.ts`
 Expected: All 2 tests pass.
 
 **Step 6: Commit**
 
 ```bash
-git add src/rules/sv-no-legacy-event-syntax.ts tests/rules/sv-no-legacy-event-syntax.test.ts tests/fixtures/legacy-events.svelte tests/fixtures/clean-events.svelte
-git commit -m "feat: add sv-no-legacy-event-syntax rule (on:click -> onclick)"
+git add src/rules/sv-require-native-events.ts tests/rules/sv-require-native-events.test.ts tests/fixtures/legacy-events.svelte tests/fixtures/clean-events.svelte
+git commit -m "feat: add sv-require-native-events rule (on:click -> onclick)"
 ```
 
 ---
@@ -1856,13 +1827,13 @@ git commit -m "feat: add SvelteKit boundary rules (shared state + env secrets)"
 
 ---
 
-### Task 13: Rules — kit-require-use-enhance + perf-avoid-load-waterfalls
+### Task 13: Rules — kit-require-use-enhance + perf-no-load-waterfalls
 
 **Files:**
 - Create: `src/rules/kit-require-use-enhance.ts`
-- Create: `src/rules/perf-avoid-load-waterfalls.ts`
+- Create: `src/rules/perf-no-load-waterfalls.ts`
 - Create: `tests/rules/kit-require-use-enhance.test.ts`
-- Create: `tests/rules/perf-avoid-load-waterfalls.test.ts`
+- Create: `tests/rules/perf-no-load-waterfalls.test.ts`
 - Create: `tests/fixtures/form-no-enhance.svelte`
 - Create: `tests/fixtures/form-with-enhance.svelte`
 - Create: `tests/fixtures/load-waterfall.ts`
@@ -1950,10 +1921,10 @@ describe('kit-require-use-enhance', () => {
 });
 ```
 
-`tests/rules/perf-avoid-load-waterfalls.test.ts`:
+`tests/rules/perf-no-load-waterfalls.test.ts`:
 ```typescript
 import { describe, it, expect } from 'vitest';
-import { perfAvoidLoadWaterfalls } from '../../src/rules/perf-avoid-load-waterfalls.js';
+import { perfNoLoadWaterfalls } from '../../src/rules/perf-no-load-waterfalls.js';
 import { analyzeFile } from '../../src/engine.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -1965,11 +1936,11 @@ function analyzeFixture(fixtureName: string) {
     filePath: fixturePath,
     fileRole: 'page-server',
     source,
-    rules: [perfAvoidLoadWaterfalls],
+    rules: [perfNoLoadWaterfalls],
   });
 }
 
-describe('perf-avoid-load-waterfalls', () => {
+describe('perf-no-load-waterfalls', () => {
   it('flags sequential independent awaits in load()', () => {
     const diagnostics = analyzeFixture('load-waterfall.ts');
     expect(diagnostics.length).toBeGreaterThanOrEqual(1);
@@ -1985,7 +1956,7 @@ describe('perf-avoid-load-waterfalls', () => {
 
 **Step 3: Run tests to verify they fail**
 
-Run: `npx vitest run tests/rules/kit-require-use-enhance.test.ts tests/rules/perf-avoid-load-waterfalls.test.ts`
+Run: `npx vitest run tests/rules/kit-require-use-enhance.test.ts tests/rules/perf-no-load-waterfalls.test.ts`
 Expected: FAIL
 
 **Step 4: Implement kit-require-use-enhance**
@@ -2036,7 +2007,7 @@ export const kitRequireUseEnhance: Rule = {
 };
 ```
 
-**Step 5: Implement perf-avoid-load-waterfalls**
+**Step 5: Implement perf-no-load-waterfalls**
 
 Walk the TS AST looking for the exported `load` function. Then check for consecutive `await` expressions in its body where the second does not reference variables from the first.
 
@@ -2044,8 +2015,8 @@ Walk the TS AST looking for the exported `load` function. Then check for consecu
 import { walk } from 'estree-walker';
 import type { Rule } from '../types.js';
 
-export const perfAvoidLoadWaterfalls: Rule = {
-  id: 'perf-avoid-load-waterfalls',
+export const perfNoLoadWaterfalls: Rule = {
+  id: 'perf-no-load-waterfalls',
   severity: 'warning',
   applicableTo: ['page-server', 'layout-server', 'page-client', 'layout-client'],
   description: 'Detects sequential independent await calls in load() that could be parallelized.',
@@ -2125,19 +2096,21 @@ export const perfAvoidLoadWaterfalls: Rule = {
 
 **Step 6: Run tests to verify they pass**
 
-Run: `npx vitest run tests/rules/kit-require-use-enhance.test.ts tests/rules/perf-avoid-load-waterfalls.test.ts`
+Run: `npx vitest run tests/rules/kit-require-use-enhance.test.ts tests/rules/perf-no-load-waterfalls.test.ts`
 Expected: All 4 tests pass.
 
 **Step 7: Commit**
 
 ```bash
-git add src/rules/kit-require-use-enhance.ts src/rules/perf-avoid-load-waterfalls.ts tests/rules/ tests/fixtures/form-no-enhance.svelte tests/fixtures/form-with-enhance.svelte tests/fixtures/load-waterfall.ts tests/fixtures/load-parallel.ts
-git commit -m "feat: add kit-require-use-enhance and perf-avoid-load-waterfalls rules"
+git add src/rules/kit-require-use-enhance.ts src/rules/perf-no-load-waterfalls.ts tests/rules/ tests/fixtures/form-no-enhance.svelte tests/fixtures/form-with-enhance.svelte tests/fixtures/load-waterfall.ts tests/fixtures/load-parallel.ts
+git commit -m "feat: add kit-require-use-enhance and perf-no-load-waterfalls rules"
 ```
 
 ---
 
 ### Task 14: Rule Registry
+
+**Note:** This task initially creates the registry with the first 10 rules (Tasks 7-13). After Tasks 23-28 are completed, this registry MUST be updated to import and export all 22 rules.
 
 **Files:**
 - Create: `src/rules/index.ts`
@@ -2145,40 +2118,91 @@ git commit -m "feat: add kit-require-use-enhance and perf-avoid-load-waterfalls 
 
 **Step 1: Create the rule registry**
 
+Initially with rules from Tasks 7-13 only. After all rule tasks are complete, update to include all 22 rules:
+
 ```typescript
-import { svRequireRunes } from './sv-require-runes.js';
+// Rules from Tasks 7-13
+import { svNoExportLet } from './sv-no-export-let.js';
 import { svNoEffectStateMutation } from './sv-no-effect-state-mutation.js';
 import { svPreferSnippets } from './sv-prefer-snippets.js';
 import { svNoEventDispatcher } from './sv-no-event-dispatcher.js';
-import { svNoLegacyEventSyntax } from './sv-no-legacy-event-syntax.js';
+import { svRequireNativeEvents } from './sv-require-native-events.js';
 import { kitNoSharedServerState } from './kit-no-shared-server-state.js';
 import { kitServerOnlySecrets } from './kit-server-only-secrets.js';
 import { kitRequireUseEnhance } from './kit-require-use-enhance.js';
-import { perfAvoidLoadWaterfalls } from './perf-avoid-load-waterfalls.js';
+import { perfNoLoadWaterfalls } from './perf-no-load-waterfalls.js';
+// Rules from Task 23
+import { svNoReactiveStatements } from './sv-no-reactive-statements.js';
+// Rules from Task 24
+import { svNoEventModifiers } from './sv-no-event-modifiers.js';
+import { svNoComponentConstructor } from './sv-no-component-constructor.js';
+// Rules from Task 25
+import { svPreferDerivedOverEffect } from './sv-prefer-derived-over-effect.js';
+import { svNoStaleDerivedLet } from './sv-no-stale-derived-let.js';
+// Rules from Task 26
+import { svRequireBindableRune } from './sv-require-bindable-rune.js';
+import { svReactivityLossPrimitive } from './sv-reactivity-loss-primitive.js';
+// Rules from Task 27
+import { svNoMagicProps } from './sv-no-magic-props.js';
+import { svRequireSnippetInvocation } from './sv-require-snippet-invocation.js';
+import { svNoSvelteComponent } from './sv-no-svelte-component.js';
+// Rules from Task 28
+import { kitNoGotoInServer } from './kit-no-goto-in-server.js';
+import { perfPreferStateRaw } from './perf-prefer-state-raw.js';
+import { perfNoFunctionDerived } from './perf-no-function-derived.js';
 import type { Rule } from '../types.js';
 
 export const allRules: Rule[] = [
-  svRequireRunes,
+  // Migration rules (sv-*)
+  svNoExportLet,
+  svNoReactiveStatements,
   svNoEffectStateMutation,
   svPreferSnippets,
   svNoEventDispatcher,
-  svNoLegacyEventSyntax,
+  svRequireNativeEvents,
+  svNoEventModifiers,
+  svNoComponentConstructor,
+  svPreferDerivedOverEffect,
+  svNoStaleDerivedLet,
+  svRequireBindableRune,
+  svReactivityLossPrimitive,
+  svNoMagicProps,
+  svRequireSnippetInvocation,
+  svNoSvelteComponent,
+  // SvelteKit rules (kit-*)
   kitNoSharedServerState,
   kitServerOnlySecrets,
   kitRequireUseEnhance,
-  perfAvoidLoadWaterfalls,
+  kitNoGotoInServer,
+  // Performance rules (perf-*)
+  perfNoLoadWaterfalls,
+  perfPreferStateRaw,
+  perfNoFunctionDerived,
 ];
 
 export {
-  svRequireRunes,
+  svNoExportLet,
+  svNoReactiveStatements,
   svNoEffectStateMutation,
   svPreferSnippets,
   svNoEventDispatcher,
-  svNoLegacyEventSyntax,
+  svRequireNativeEvents,
+  svNoEventModifiers,
+  svNoComponentConstructor,
+  svPreferDerivedOverEffect,
+  svNoStaleDerivedLet,
+  svRequireBindableRune,
+  svReactivityLossPrimitive,
+  svNoMagicProps,
+  svRequireSnippetInvocation,
+  svNoSvelteComponent,
   kitNoSharedServerState,
   kitServerOnlySecrets,
   kitRequireUseEnhance,
-  perfAvoidLoadWaterfalls,
+  kitNoGotoInServer,
+  perfNoLoadWaterfalls,
+  perfPreferStateRaw,
+  perfNoFunctionDerived,
 };
 ```
 
@@ -2191,7 +2215,7 @@ Expected: All tests pass.
 
 ```bash
 git add src/rules/index.ts
-git commit -m "feat: add rule registry exporting all 9 rules"
+git commit -m "feat: add rule registry exporting all 22 rules"
 ```
 
 ---
@@ -2213,7 +2237,7 @@ describe('formatTerminalReport', () => {
   it('formats a report with diagnostics', () => {
     const diagnostics: Diagnostic[] = [
       {
-        ruleId: 'sv-require-runes',
+        ruleId: 'sv-no-export-let',
         severity: 'error',
         filePath: 'src/routes/+page.svelte',
         line: 3,
@@ -2227,14 +2251,14 @@ describe('formatTerminalReport', () => {
     const output = formatTerminalReport(diagnostics, score, 10, false);
 
     expect(output).toContain('97');
-    expect(output).toContain('sv-require-runes');
+    expect(output).toContain('sv-no-export-let');
     expect(output).toContain('1 issue');
   });
 
   it('shows file details in verbose mode', () => {
     const diagnostics: Diagnostic[] = [
       {
-        ruleId: 'sv-require-runes',
+        ruleId: 'sv-no-export-let',
         severity: 'error',
         filePath: 'src/routes/+page.svelte',
         line: 3,
@@ -2365,7 +2389,7 @@ describe('formatAgentReport', () => {
   it('produces valid XML with diagnostics', () => {
     const diagnostics: Diagnostic[] = [
       {
-        ruleId: 'sv-require-runes',
+        ruleId: 'sv-no-export-let',
         severity: 'error',
         filePath: 'src/routes/+page.svelte',
         line: 3,
@@ -2383,7 +2407,7 @@ describe('formatAgentReport', () => {
     expect(output).toContain('score="97"');
     expect(output).toContain('label="Excellent"');
     expect(output).toContain('<issue');
-    expect(output).toContain('rule="sv-require-runes"');
+    expect(output).toContain('rule="sv-no-export-let"');
     expect(output).toContain('<agent-instruction>');
     expect(output).toContain('Use $props() rune instead');
     expect(output).toContain('</svelte-doctor-report>');
@@ -2470,7 +2494,7 @@ git commit -m "feat: add agent XML reporter for LLM consumption"
 
 **Step 1: Write the failing test**
 
-Test the fixer with the `sv-require-runes` rule's fix function. The fixer collects all fixable diagnostics and applies their rule's `fix()` function.
+Test the fixer with the `sv-no-export-let` rule's fix function. The fixer collects all fixable diagnostics and applies their rule's `fix()` function.
 
 ```typescript
 import { describe, it, expect } from 'vitest';
@@ -3000,6 +3024,8 @@ git commit -m "feat: add init command for agent context generation"
 
 ### Task 20: Integration Test
 
+**Note:** After Tasks 23-28 are completed, this integration test MUST be updated to include fixtures that exercise all 22 rules and to assert that all 22 rule IDs fire as expected.
+
 **Files:**
 - Create: `tests/integration/full-scan.test.ts`
 - Create: `tests/integration/fixtures/` (mini SvelteKit project)
@@ -3031,7 +3057,7 @@ Create the following files to simulate a SvelteKit project with known violations
 </form>
 ```
 
-This fixture has violations for: `sv-require-runes` (export let, $:), `sv-no-event-dispatcher`, `sv-no-legacy-event-syntax` (on:click), `sv-prefer-snippets` (<slot>), `kit-require-use-enhance`.
+This fixture has violations for: `sv-no-export-let` (export let), `sv-no-reactive-statements` ($:), `sv-no-event-dispatcher`, `sv-require-native-events` (on:click), `sv-prefer-snippets` (<slot>), `kit-require-use-enhance`.
 
 `tests/integration/fixtures/src/routes/+page.server.ts`:
 ```typescript
@@ -3044,7 +3070,7 @@ export async function load({ fetch }) {
 }
 ```
 
-This has violations for: `kit-no-shared-server-state`, `perf-avoid-load-waterfalls`.
+This has violations for: `kit-no-shared-server-state`, `perf-no-load-waterfalls`.
 
 `tests/integration/fixtures/src/routes/+page.ts`:
 ```typescript
@@ -3076,14 +3102,14 @@ describe('integration: full scan', () => {
     // Check that expected rules fired
     const ruleIds = new Set(result.diagnostics.map((d) => d.ruleId));
 
-    expect(ruleIds.has('sv-require-runes')).toBe(true);
+    expect(ruleIds.has('sv-no-export-let')).toBe(true);
     expect(ruleIds.has('sv-no-event-dispatcher')).toBe(true);
-    expect(ruleIds.has('sv-no-legacy-event-syntax')).toBe(true);
+    expect(ruleIds.has('sv-require-native-events')).toBe(true);
     expect(ruleIds.has('sv-prefer-snippets')).toBe(true);
     expect(ruleIds.has('kit-require-use-enhance')).toBe(true);
     expect(ruleIds.has('kit-no-shared-server-state')).toBe(true);
     expect(ruleIds.has('kit-server-only-secrets')).toBe(true);
-    expect(ruleIds.has('perf-avoid-load-waterfalls')).toBe(true);
+    expect(ruleIds.has('perf-no-load-waterfalls')).toBe(true);
 
     // Score should be low with this many violations
     expect(result.score.score).toBeLessThan(75);
@@ -3092,11 +3118,11 @@ describe('integration: full scan', () => {
 
   it('respects rule ignoring via config', async () => {
     const result = await diagnose(FIXTURES_ROOT, {
-      ignoreRules: ['sv-require-runes', 'sv-no-event-dispatcher'],
+      ignoreRules: ['sv-no-export-let', 'sv-no-event-dispatcher'],
     });
 
     const ruleIds = new Set(result.diagnostics.map((d) => d.ruleId));
-    expect(ruleIds.has('sv-require-runes')).toBe(false);
+    expect(ruleIds.has('sv-no-export-let')).toBe(false);
     expect(ruleIds.has('sv-no-event-dispatcher')).toBe(false);
     // Other rules should still fire
     expect(ruleIds.has('sv-prefer-snippets')).toBe(true);
@@ -3183,4 +3209,1767 @@ Expected: All remaining tests pass.
 ```bash
 git rm tests/smoke.test.ts
 git commit -m "chore: remove scaffolding smoke test"
+```
+
+---
+
+### Task 23: Rule — sv-no-reactive-statements
+
+This rule detects legacy `$:` labeled statements (split from the original sv-require-runes rule). The `$:` detection was removed from Task 7 (sv-no-export-let) and moved here.
+
+**Files:**
+- Create: `src/rules/sv-no-reactive-statements.ts`
+- Create: `tests/rules/sv-no-reactive-statements.test.ts`
+- Create: `tests/fixtures/clean-derived.svelte`
+- Reuse: `tests/fixtures/legacy-reactive.svelte` (already created in Task 7)
+
+**Step 1: Create test fixtures**
+
+`tests/fixtures/legacy-reactive.svelte` (already exists from Task 7):
+```svelte
+<script>
+  let count = 0;
+  $: doubled = count * 2;
+  $: {
+    console.log(count);
+  }
+</script>
+
+<p>{doubled}</p>
+```
+
+`tests/fixtures/clean-derived.svelte`:
+```svelte
+<script>
+  let count = $state(0);
+  let doubled = $derived(count * 2);
+
+  $effect(() => {
+    console.log(count);
+  });
+</script>
+
+<p>{doubled}</p>
+```
+
+**Step 2: Write the failing test**
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { svNoReactiveStatements } from '../../src/rules/sv-no-reactive-statements.js';
+import { analyzeFile } from '../../src/engine.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+function analyzeFixture(fixtureName: string) {
+  const fixturePath = path.join(__dirname, '../fixtures', fixtureName);
+  const source = fs.readFileSync(fixturePath, 'utf-8');
+  return analyzeFile({
+    filePath: fixturePath,
+    fileRole: 'svelte-component',
+    source,
+    rules: [svNoReactiveStatements],
+  });
+}
+
+describe('sv-no-reactive-statements', () => {
+  it('flags $: reactive assignment statements', () => {
+    const diagnostics = analyzeFixture('legacy-reactive.svelte');
+    const reactiveIssues = diagnostics.filter((d) => d.message.includes('$:'));
+    expect(reactiveIssues.length).toBeGreaterThanOrEqual(2); // $: doubled = ... and $: { block }
+  });
+
+  it('passes clean $derived and $effect code', () => {
+    const diagnostics = analyzeFixture('clean-derived.svelte');
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('has correct metadata', () => {
+    expect(svNoReactiveStatements.id).toBe('sv-no-reactive-statements');
+    expect(svNoReactiveStatements.severity).toBe('error');
+    expect(svNoReactiveStatements.applicableTo).toContain('svelte-component');
+  });
+
+  it('is fixable', () => {
+    expect(svNoReactiveStatements.fix).toBeDefined();
+  });
+
+  it('fixes $: x = expr to $derived', () => {
+    const source = '<script>\n  $: doubled = count * 2;\n</script>';
+    const diagnostic = {
+      ruleId: 'sv-no-reactive-statements',
+      severity: 'error' as const,
+      filePath: 'test.svelte',
+      line: 2,
+      column: 2,
+      message: 'test',
+      agentInstruction: 'test',
+      fixable: true,
+    };
+    const result = svNoReactiveStatements.fix!(source, diagnostic);
+    expect(result).toContain('$derived(');
+    expect(result).not.toContain('$:');
+  });
+});
+```
+
+**Step 3: Run test to verify it fails**
+
+Run: `npx vitest run tests/rules/sv-no-reactive-statements.test.ts`
+Expected: FAIL — cannot resolve rule module.
+
+**Step 4: Implement the rule**
+
+```typescript
+import { walk } from 'estree-walker';
+import type { Rule } from '../types.js';
+
+export const svNoReactiveStatements: Rule = {
+  id: 'sv-no-reactive-statements',
+  severity: 'error',
+  applicableTo: ['svelte-component'],
+  description: 'Flags legacy Svelte 4 $: reactive statements.',
+  agentPrompt:
+    'This is Svelte 5. Replace `$: x = expr` with `let x = $derived(expr)`. Replace `$: { block }` with `$effect(() => { block })`.',
+  analyze: (ast, context) => {
+    if (!ast.instance) return;
+
+    walk(ast.instance.content, {
+      enter(node: any) {
+        if (node.type === 'LabeledStatement' && node.label?.name === '$') {
+          context.report({
+            node,
+            message:
+              'Legacy Svelte 4 `$:` reactive statement detected. Use `$derived()` or `$effect()` instead.',
+          });
+        }
+      },
+    });
+  },
+  fix: (source, _diagnostic) => {
+    // Fix $: x = expr -> let x = $derived(expr)
+    let result = source.replace(
+      /\$:\s+(\w+)\s*=\s*(.+);/g,
+      'let $1 = $derived($2);'
+    );
+    // Fix $: { block } -> $effect(() => { block })
+    result = result.replace(
+      /\$:\s*\{([^}]+)\}/g,
+      '$effect(() => {$1})'
+    );
+    return result !== source ? result : null;
+  },
+};
+```
+
+**Step 5: Run test to verify it passes**
+
+Run: `npx vitest run tests/rules/sv-no-reactive-statements.test.ts`
+Expected: All 5 tests pass.
+
+**Step 6: Commit**
+
+```bash
+git add src/rules/sv-no-reactive-statements.ts tests/rules/sv-no-reactive-statements.test.ts tests/fixtures/clean-derived.svelte
+git commit -m "feat: add sv-no-reactive-statements rule (detects legacy $: statements)"
+```
+
+---
+
+### Task 24: Rules — sv-no-event-modifiers + sv-no-component-constructor
+
+Group of two migration rules: event modifier detection and legacy component constructor detection.
+
+**Files:**
+- Create: `src/rules/sv-no-event-modifiers.ts`
+- Create: `src/rules/sv-no-component-constructor.ts`
+- Create: `tests/rules/sv-no-event-modifiers.test.ts`
+- Create: `tests/rules/sv-no-component-constructor.test.ts`
+- Create: `tests/fixtures/event-modifiers.svelte`
+- Create: `tests/fixtures/legacy-constructor.ts`
+- Create: `tests/fixtures/clean-mount.ts`
+
+**Step 1: Create test fixtures**
+
+`tests/fixtures/event-modifiers.svelte`:
+```svelte
+<script>
+  function handleClick(e) {
+    console.log('clicked');
+  }
+  function handleSubmit(e) {
+    console.log('submitted');
+  }
+</script>
+
+<button on:click|preventDefault={handleClick}>Click</button>
+<form on:submit|preventDefault|stopPropagation={handleSubmit}>
+  <button type="submit">Submit</button>
+</form>
+```
+
+`tests/fixtures/legacy-constructor.ts`:
+```typescript
+import App from './App.svelte';
+
+const app = new App({
+  target: document.body,
+  props: { name: 'world' },
+});
+
+export default app;
+```
+
+`tests/fixtures/clean-mount.ts`:
+```typescript
+import { mount } from 'svelte';
+import App from './App.svelte';
+
+const app = mount(App, {
+  target: document.body,
+  props: { name: 'world' },
+});
+
+export default app;
+```
+
+**Step 2: Write failing tests**
+
+`tests/rules/sv-no-event-modifiers.test.ts`:
+```typescript
+import { describe, it, expect } from 'vitest';
+import { svNoEventModifiers } from '../../src/rules/sv-no-event-modifiers.js';
+import { analyzeFile } from '../../src/engine.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+function analyzeFixture(fixtureName: string) {
+  const fixturePath = path.join(__dirname, '../fixtures', fixtureName);
+  const source = fs.readFileSync(fixturePath, 'utf-8');
+  return analyzeFile({
+    filePath: fixturePath,
+    fileRole: 'svelte-component',
+    source,
+    rules: [svNoEventModifiers],
+  });
+}
+
+describe('sv-no-event-modifiers', () => {
+  it('flags on:click|preventDefault modifier syntax', () => {
+    const diagnostics = analyzeFixture('event-modifiers.svelte');
+    expect(diagnostics.length).toBeGreaterThanOrEqual(2); // click + submit with modifiers
+    expect(diagnostics[0].message).toContain('modifier');
+  });
+
+  it('passes clean event syntax without modifiers', () => {
+    const diagnostics = analyzeFixture('clean-events.svelte');
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('is not fixable', () => {
+    expect(svNoEventModifiers.fix).toBeUndefined();
+  });
+
+  it('has correct metadata', () => {
+    expect(svNoEventModifiers.id).toBe('sv-no-event-modifiers');
+    expect(svNoEventModifiers.severity).toBe('warning');
+    expect(svNoEventModifiers.applicableTo).toContain('svelte-component');
+  });
+});
+```
+
+`tests/rules/sv-no-component-constructor.test.ts`:
+```typescript
+import { describe, it, expect } from 'vitest';
+import { svNoComponentConstructor } from '../../src/rules/sv-no-component-constructor.js';
+import { analyzeFile } from '../../src/engine.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+function analyzeFixture(fixtureName: string, fileRole: 'svelte-component' | 'lib-client' | 'lib-server' = 'lib-client') {
+  const fixturePath = path.join(__dirname, '../fixtures', fixtureName);
+  const source = fs.readFileSync(fixturePath, 'utf-8');
+  return analyzeFile({
+    filePath: fixturePath,
+    fileRole,
+    source,
+    rules: [svNoComponentConstructor],
+  });
+}
+
+describe('sv-no-component-constructor', () => {
+  it('flags new App({ target: ... }) constructor pattern', () => {
+    const diagnostics = analyzeFixture('legacy-constructor.ts');
+    expect(diagnostics.length).toBeGreaterThanOrEqual(1);
+    expect(diagnostics[0].message).toContain('constructor');
+  });
+
+  it('passes mount() pattern', () => {
+    const diagnostics = analyzeFixture('clean-mount.ts');
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('is not fixable', () => {
+    expect(svNoComponentConstructor.fix).toBeUndefined();
+  });
+
+  it('has correct metadata', () => {
+    expect(svNoComponentConstructor.id).toBe('sv-no-component-constructor');
+    expect(svNoComponentConstructor.severity).toBe('error');
+    expect(svNoComponentConstructor.applicableTo).toContain('svelte-component');
+    expect(svNoComponentConstructor.applicableTo).toContain('lib-client');
+    expect(svNoComponentConstructor.applicableTo).toContain('lib-server');
+  });
+});
+```
+
+**Step 3: Run tests to verify they fail**
+
+Run: `npx vitest run tests/rules/sv-no-event-modifiers.test.ts tests/rules/sv-no-component-constructor.test.ts`
+Expected: FAIL
+
+**Step 4: Implement sv-no-event-modifiers**
+
+Walk the template AST looking for `OnDirective` nodes with a non-empty `modifiers` array.
+
+```typescript
+import { walk } from 'estree-walker';
+import type { Rule } from '../types.js';
+
+export const svNoEventModifiers: Rule = {
+  id: 'sv-no-event-modifiers',
+  severity: 'warning',
+  applicableTo: ['svelte-component'],
+  description: 'Flags on:event|modifier syntax. Modifiers need manual refactoring to inline code.',
+  agentPrompt:
+    'Svelte 5 removes event modifiers like `|preventDefault`. Instead, call `event.preventDefault()` inside the handler function. Replace `on:click|preventDefault={handler}` with `onclick={(e) => { e.preventDefault(); handler(e); }}`.',
+  analyze: (ast, context) => {
+    if (!ast.fragment) return;
+
+    walk(ast.fragment, {
+      enter(node: any) {
+        if (
+          node.type === 'OnDirective' &&
+          node.modifiers &&
+          node.modifiers.length > 0
+        ) {
+          const mods = node.modifiers.join('|');
+          context.report({
+            node,
+            message: `Event modifier \`|${mods}\` on \`on:${node.name}\` detected. Svelte 5 removes event modifiers. Call \`event.${node.modifiers[0]}()\` inside the handler instead.`,
+          });
+        }
+      },
+    });
+  },
+};
+```
+
+**Step 5: Implement sv-no-component-constructor**
+
+Walk the TS/JS AST looking for `NewExpression` where the argument is an `ObjectExpression` containing a `target` property.
+
+```typescript
+import { walk } from 'estree-walker';
+import type { Rule } from '../types.js';
+
+export const svNoComponentConstructor: Rule = {
+  id: 'sv-no-component-constructor',
+  severity: 'error',
+  applicableTo: ['svelte-component', 'lib-client', 'lib-server'],
+  description: 'Flags legacy `new Component({ target })` constructor pattern.',
+  agentPrompt:
+    'Svelte 5 removes the class-based component constructor. Use `import { mount } from \'svelte\'; mount(Component, { target })` instead of `new Component({ target })`.',
+  analyze: (ast, context) => {
+    // For Svelte files, walk ast.instance.content; for TS/JS files, walk ast.body
+    const root = ast.instance?.content ?? ast;
+    if (!root) return;
+
+    walk(root, {
+      enter(node: any) {
+        if (
+          node.type === 'NewExpression' &&
+          node.arguments?.[0]?.type === 'ObjectExpression'
+        ) {
+          const hasTarget = node.arguments[0].properties?.some(
+            (p: any) =>
+              p.type === 'Property' &&
+              (p.key?.name === 'target' || p.key?.value === 'target')
+          );
+          if (hasTarget) {
+            const name = node.callee?.name ?? 'Component';
+            context.report({
+              node,
+              message: `Legacy component constructor \`new ${name}({ target })\` detected. Use \`mount(${name}, { target })\` from \`svelte\` instead.`,
+            });
+          }
+        }
+      },
+    });
+  },
+};
+```
+
+**Step 6: Run tests to verify they pass**
+
+Run: `npx vitest run tests/rules/sv-no-event-modifiers.test.ts tests/rules/sv-no-component-constructor.test.ts`
+Expected: All tests pass.
+
+**Step 7: Commit**
+
+```bash
+git add src/rules/sv-no-event-modifiers.ts src/rules/sv-no-component-constructor.ts tests/rules/sv-no-event-modifiers.test.ts tests/rules/sv-no-component-constructor.test.ts tests/fixtures/event-modifiers.svelte tests/fixtures/legacy-constructor.ts tests/fixtures/clean-mount.ts
+git commit -m "feat: add sv-no-event-modifiers and sv-no-component-constructor rules"
+```
+
+---
+
+### Task 25: Rules — sv-prefer-derived-over-effect + sv-no-stale-derived-let
+
+Group of two related reactivity rules for detecting common Svelte 5 anti-patterns.
+
+**Files:**
+- Create: `src/rules/sv-prefer-derived-over-effect.ts`
+- Create: `src/rules/sv-no-stale-derived-let.ts`
+- Create: `tests/rules/sv-prefer-derived-over-effect.test.ts`
+- Create: `tests/rules/sv-no-stale-derived-let.test.ts`
+- Create: `tests/fixtures/effect-as-derived.svelte`
+- Create: `tests/fixtures/stale-let.svelte`
+
+**Step 1: Create test fixtures**
+
+`tests/fixtures/effect-as-derived.svelte`:
+```svelte
+<script>
+  let count = $state(0);
+  let doubled = $state(0);
+
+  $effect(() => {
+    doubled = count * 2;
+  });
+</script>
+
+<p>{doubled}</p>
+```
+
+Note: This overlaps with `sv-no-effect-state-mutation` but serves a different purpose. That rule flags the infinite-loop risk; this rule specifically flags that the effect could be replaced with `$derived`.
+
+`tests/fixtures/stale-let.svelte`:
+```svelte
+<script>
+  let { a, b } = $props();
+  let doubled = a * 2;
+  let sum = a + b;
+</script>
+
+<p>{doubled} {sum}</p>
+```
+
+**Step 2: Write failing tests**
+
+`tests/rules/sv-prefer-derived-over-effect.test.ts`:
+```typescript
+import { describe, it, expect } from 'vitest';
+import { svPreferDerivedOverEffect } from '../../src/rules/sv-prefer-derived-over-effect.js';
+import { analyzeFile } from '../../src/engine.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+function analyzeFixture(fixtureName: string) {
+  const fixturePath = path.join(__dirname, '../fixtures', fixtureName);
+  const source = fs.readFileSync(fixturePath, 'utf-8');
+  return analyzeFile({
+    filePath: fixturePath,
+    fileRole: 'svelte-component',
+    source,
+    rules: [svPreferDerivedOverEffect],
+  });
+}
+
+describe('sv-prefer-derived-over-effect', () => {
+  it('flags $effect that only assigns a single variable', () => {
+    const diagnostics = analyzeFixture('effect-as-derived.svelte');
+    expect(diagnostics.length).toBeGreaterThanOrEqual(1);
+    expect(diagnostics[0].message).toContain('$derived');
+  });
+
+  it('passes clean $effect with side effects (console.log, fetch, etc.)', () => {
+    const diagnostics = analyzeFixture('clean-effect.svelte');
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('is not fixable', () => {
+    expect(svPreferDerivedOverEffect.fix).toBeUndefined();
+  });
+
+  it('has correct metadata', () => {
+    expect(svPreferDerivedOverEffect.id).toBe('sv-prefer-derived-over-effect');
+    expect(svPreferDerivedOverEffect.severity).toBe('warning');
+    expect(svPreferDerivedOverEffect.applicableTo).toContain('svelte-component');
+  });
+});
+```
+
+`tests/rules/sv-no-stale-derived-let.test.ts`:
+```typescript
+import { describe, it, expect } from 'vitest';
+import { svNoStaleDerivedLet } from '../../src/rules/sv-no-stale-derived-let.js';
+import { analyzeFile } from '../../src/engine.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+function analyzeFixture(fixtureName: string) {
+  const fixturePath = path.join(__dirname, '../fixtures', fixtureName);
+  const source = fs.readFileSync(fixturePath, 'utf-8');
+  return analyzeFile({
+    filePath: fixturePath,
+    fileRole: 'svelte-component',
+    source,
+    rules: [svNoStaleDerivedLet],
+  });
+}
+
+describe('sv-no-stale-derived-let', () => {
+  it('flags let declarations that derive from $props() variables', () => {
+    const diagnostics = analyzeFixture('stale-let.svelte');
+    expect(diagnostics.length).toBeGreaterThanOrEqual(2); // doubled and sum
+    expect(diagnostics[0].message).toContain('$derived');
+  });
+
+  it('passes clean $derived usage', () => {
+    const diagnostics = analyzeFixture('clean-runes.svelte');
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('is fixable', () => {
+    expect(svNoStaleDerivedLet.fix).toBeDefined();
+  });
+
+  it('has correct metadata', () => {
+    expect(svNoStaleDerivedLet.id).toBe('sv-no-stale-derived-let');
+    expect(svNoStaleDerivedLet.severity).toBe('warning');
+    expect(svNoStaleDerivedLet.applicableTo).toContain('svelte-component');
+  });
+});
+```
+
+**Step 3: Run tests to verify they fail**
+
+Run: `npx vitest run tests/rules/sv-prefer-derived-over-effect.test.ts tests/rules/sv-no-stale-derived-let.test.ts`
+Expected: FAIL
+
+**Step 4: Implement sv-prefer-derived-over-effect**
+
+Detects `$effect()` where the callback body contains ONLY a single `ExpressionStatement` that is an `AssignmentExpression`.
+
+```typescript
+import { walk } from 'estree-walker';
+import type { Rule } from '../types.js';
+
+export const svPreferDerivedOverEffect: Rule = {
+  id: 'sv-prefer-derived-over-effect',
+  severity: 'warning',
+  applicableTo: ['svelte-component'],
+  description: 'Flags $effect() that could be replaced with $derived().',
+  agentPrompt:
+    'This `$effect()` only assigns a single variable from a computation. Replace with `$derived()`: `let x = $derived(expr);` instead of `$effect(() => { x = expr; })`.',
+  analyze: (ast, context) => {
+    if (!ast.instance) return;
+
+    walk(ast.instance.content, {
+      enter(node: any) {
+        if (
+          node.type === 'ExpressionStatement' &&
+          node.expression?.type === 'CallExpression' &&
+          node.expression.callee?.name === '$effect' &&
+          node.expression.arguments?.[0]
+        ) {
+          const callback = node.expression.arguments[0];
+          const body = callback.body;
+
+          // Check if the callback body is a BlockStatement with exactly one statement
+          if (body?.type === 'BlockStatement' && body.body?.length === 1) {
+            const stmt = body.body[0];
+            if (
+              stmt.type === 'ExpressionStatement' &&
+              stmt.expression?.type === 'AssignmentExpression'
+            ) {
+              const varName = stmt.expression.left?.name ?? 'variable';
+              context.report({
+                node,
+                message: `\`$effect()\` only assigns \`${varName}\`. Use \`let ${varName} = $derived(expr)\` instead for reactive derivation.`,
+              });
+            }
+          }
+        }
+      },
+    });
+  },
+};
+```
+
+**Step 5: Implement sv-no-stale-derived-let**
+
+Detects `VariableDeclaration` with `kind: 'let'` where the init expression references a variable known to come from `$props()` or `$state()`.
+
+```typescript
+import { walk } from 'estree-walker';
+import type { Rule } from '../types.js';
+
+export const svNoStaleDerivedLet: Rule = {
+  id: 'sv-no-stale-derived-let',
+  severity: 'warning',
+  applicableTo: ['svelte-component'],
+  description: 'Flags `let x = expr` where expr references reactive ($props/$state) variables, causing stale values.',
+  agentPrompt:
+    'This `let` declaration computes a value from reactive variables but will NOT update when those variables change. Use `let x = $derived(expr)` to keep it reactive.',
+  analyze: (ast, context) => {
+    if (!ast.instance) return;
+
+    // Step 1: Collect variable names from $props() destructuring and $state() init
+    const reactiveVars = new Set<string>();
+    walk(ast.instance.content, {
+      enter(node: any) {
+        if (node.type === 'VariableDeclaration') {
+          for (const decl of node.declarations) {
+            // Detect: let { a, b } = $props()
+            if (
+              decl.init?.type === 'CallExpression' &&
+              decl.init.callee?.name === '$props' &&
+              decl.id?.type === 'ObjectPattern'
+            ) {
+              for (const prop of decl.id.properties) {
+                if (prop.type === 'Property' && prop.value?.type === 'Identifier') {
+                  reactiveVars.add(prop.value.name);
+                } else if (prop.type === 'RestElement' && prop.argument?.type === 'Identifier') {
+                  reactiveVars.add(prop.argument.name);
+                }
+              }
+            }
+            // Detect: let x = $state(...)
+            if (
+              decl.init?.type === 'CallExpression' &&
+              decl.init.callee?.name === '$state' &&
+              decl.id?.type === 'Identifier'
+            ) {
+              reactiveVars.add(decl.id.name);
+            }
+          }
+        }
+      },
+    });
+
+    if (reactiveVars.size === 0) return;
+
+    // Step 2: Find let declarations (not $derived, not $state, not $props) that reference reactive vars
+    walk(ast.instance.content, {
+      enter(node: any) {
+        if (node.type === 'VariableDeclaration' && node.kind === 'let') {
+          for (const decl of node.declarations) {
+            // Skip $derived, $state, $props calls
+            if (
+              decl.init?.type === 'CallExpression' &&
+              ['$derived', '$state', '$props', '$bindable'].includes(decl.init.callee?.name)
+            ) {
+              continue;
+            }
+
+            // Skip declarations without an init expression
+            if (!decl.init || decl.id?.type !== 'Identifier') continue;
+
+            // Check if init references any reactive variable
+            const referencedReactiveVars: string[] = [];
+            walk(decl.init, {
+              enter(inner: any) {
+                if (inner.type === 'Identifier' && reactiveVars.has(inner.name)) {
+                  referencedReactiveVars.push(inner.name);
+                }
+              },
+            });
+
+            if (referencedReactiveVars.length > 0) {
+              context.report({
+                node: decl,
+                message: `\`let ${decl.id.name}\` derives from reactive variable(s) \`${referencedReactiveVars.join(', ')}\` but will not update reactively. Use \`let ${decl.id.name} = $derived(expr)\` instead.`,
+              });
+            }
+          }
+        }
+      },
+    });
+  },
+  fix: (source, _diagnostic) => {
+    // Heuristic fix: find `let x = <expr>` where expr does not start with $derived/$state/$props
+    // and replace with `let x = $derived(<expr>)`
+    // This is a simplified fix; the test validates the specific case.
+    const result = source.replace(
+      /let\s+(\w+)\s*=\s*(?!\$(?:derived|state|props|bindable)\()(.+);/g,
+      (match, name, expr) => {
+        // Only fix if it looks like a derivation (contains an identifier, not a literal)
+        if (/[a-zA-Z_]/.test(expr)) {
+          return `let ${name} = $derived(${expr.trim()});`;
+        }
+        return match;
+      }
+    );
+    return result !== source ? result : null;
+  },
+};
+```
+
+**Step 6: Run tests to verify they pass**
+
+Run: `npx vitest run tests/rules/sv-prefer-derived-over-effect.test.ts tests/rules/sv-no-stale-derived-let.test.ts`
+Expected: All tests pass.
+
+**Step 7: Commit**
+
+```bash
+git add src/rules/sv-prefer-derived-over-effect.ts src/rules/sv-no-stale-derived-let.ts tests/rules/sv-prefer-derived-over-effect.test.ts tests/rules/sv-no-stale-derived-let.test.ts tests/fixtures/effect-as-derived.svelte tests/fixtures/stale-let.svelte
+git commit -m "feat: add sv-prefer-derived-over-effect and sv-no-stale-derived-let rules"
+```
+
+---
+
+### Task 26: Rules — sv-require-bindable-rune + sv-reactivity-loss-primitive
+
+Group of two related reactivity rules for detecting prop mutation without `$bindable()` and reactivity loss when passing primitives to functions.
+
+**Files:**
+- Create: `src/rules/sv-require-bindable-rune.ts`
+- Create: `src/rules/sv-reactivity-loss-primitive.ts`
+- Create: `tests/rules/sv-require-bindable-rune.test.ts`
+- Create: `tests/rules/sv-reactivity-loss-primitive.test.ts`
+- Create: `tests/fixtures/prop-mutation.svelte`
+- Create: `tests/fixtures/clean-bindable.svelte`
+- Create: `tests/fixtures/reactivity-loss.svelte`
+
+**Step 1: Create test fixtures**
+
+`tests/fixtures/prop-mutation.svelte`:
+```svelte
+<script>
+  let { count, name } = $props();
+
+  function increment() {
+    count = count + 1;
+  }
+</script>
+
+<button onclick={increment}>{count} - {name}</button>
+```
+
+`tests/fixtures/clean-bindable.svelte`:
+```svelte
+<script>
+  let { count = $bindable(0), name } = $props();
+
+  function increment() {
+    count = count + 1;
+  }
+</script>
+
+<button onclick={increment}>{count} - {name}</button>
+```
+
+`tests/fixtures/reactivity-loss.svelte`:
+```svelte
+<script>
+  let { value, label } = $props();
+
+  function processValue(val) {
+    return val * 2;
+  }
+
+  let result = processValue(value);
+</script>
+
+<p>{label}: {result}</p>
+```
+
+**Step 2: Write failing tests**
+
+`tests/rules/sv-require-bindable-rune.test.ts`:
+```typescript
+import { describe, it, expect } from 'vitest';
+import { svRequireBindableRune } from '../../src/rules/sv-require-bindable-rune.js';
+import { analyzeFile } from '../../src/engine.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+function analyzeFixture(fixtureName: string) {
+  const fixturePath = path.join(__dirname, '../fixtures', fixtureName);
+  const source = fs.readFileSync(fixturePath, 'utf-8');
+  return analyzeFile({
+    filePath: fixturePath,
+    fileRole: 'svelte-component',
+    source,
+    rules: [svRequireBindableRune],
+  });
+}
+
+describe('sv-require-bindable-rune', () => {
+  it('flags assignment to $props() variable without $bindable', () => {
+    const diagnostics = analyzeFixture('prop-mutation.svelte');
+    expect(diagnostics.length).toBeGreaterThanOrEqual(1);
+    expect(diagnostics[0].message).toContain('$bindable');
+  });
+
+  it('passes $bindable() props', () => {
+    const diagnostics = analyzeFixture('clean-bindable.svelte');
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('is not fixable', () => {
+    expect(svRequireBindableRune.fix).toBeUndefined();
+  });
+
+  it('has correct metadata', () => {
+    expect(svRequireBindableRune.id).toBe('sv-require-bindable-rune');
+    expect(svRequireBindableRune.severity).toBe('warning');
+    expect(svRequireBindableRune.applicableTo).toContain('svelte-component');
+  });
+});
+```
+
+`tests/rules/sv-reactivity-loss-primitive.test.ts`:
+```typescript
+import { describe, it, expect } from 'vitest';
+import { svReactivityLossPrimitive } from '../../src/rules/sv-reactivity-loss-primitive.js';
+import { analyzeFile } from '../../src/engine.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+function analyzeFixture(fixtureName: string) {
+  const fixturePath = path.join(__dirname, '../fixtures', fixtureName);
+  const source = fs.readFileSync(fixturePath, 'utf-8');
+  return analyzeFile({
+    filePath: fixturePath,
+    fileRole: 'svelte-component',
+    source,
+    rules: [svReactivityLossPrimitive],
+  });
+}
+
+describe('sv-reactivity-loss-primitive', () => {
+  it('flags $props variable passed directly as function argument', () => {
+    const diagnostics = analyzeFixture('reactivity-loss.svelte');
+    expect(diagnostics.length).toBeGreaterThanOrEqual(1);
+    expect(diagnostics[0].message).toContain('reactivity');
+  });
+
+  it('passes clean derived usage', () => {
+    const diagnostics = analyzeFixture('clean-runes.svelte');
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('is not fixable', () => {
+    expect(svReactivityLossPrimitive.fix).toBeUndefined();
+  });
+
+  it('has correct metadata', () => {
+    expect(svReactivityLossPrimitive.id).toBe('sv-reactivity-loss-primitive');
+    expect(svReactivityLossPrimitive.severity).toBe('warning');
+    expect(svReactivityLossPrimitive.applicableTo).toContain('svelte-component');
+  });
+});
+```
+
+**Step 3: Run tests to verify they fail**
+
+Run: `npx vitest run tests/rules/sv-require-bindable-rune.test.ts tests/rules/sv-reactivity-loss-primitive.test.ts`
+Expected: FAIL
+
+**Step 4: Implement sv-require-bindable-rune**
+
+Detects `AssignmentExpression` where the left side is a variable declared via `$props()` destructuring (not using `$bindable`).
+
+```typescript
+import { walk } from 'estree-walker';
+import type { Rule } from '../types.js';
+
+export const svRequireBindableRune: Rule = {
+  id: 'sv-require-bindable-rune',
+  severity: 'warning',
+  applicableTo: ['svelte-component'],
+  description: 'Flags assignment to $props() variables without $bindable().',
+  agentPrompt:
+    'Assigning to a prop variable requires `$bindable()`. Change `let { prop } = $props()` to `let { prop = $bindable() } = $props()` if you need two-way binding, or restructure to avoid mutation.',
+  analyze: (ast, context) => {
+    if (!ast.instance) return;
+
+    // Step 1: Collect $props() variables and which ones use $bindable
+    const propsVars = new Set<string>();
+    const bindableVars = new Set<string>();
+
+    walk(ast.instance.content, {
+      enter(node: any) {
+        if (node.type === 'VariableDeclaration') {
+          for (const decl of node.declarations) {
+            if (
+              decl.init?.type === 'CallExpression' &&
+              decl.init.callee?.name === '$props' &&
+              decl.id?.type === 'ObjectPattern'
+            ) {
+              for (const prop of decl.id.properties) {
+                if (prop.type === 'Property' && prop.value?.type === 'Identifier') {
+                  propsVars.add(prop.value.name);
+                } else if (prop.type === 'Property' && prop.value?.type === 'AssignmentPattern') {
+                  const varName = prop.value.left?.name;
+                  if (varName) {
+                    propsVars.add(varName);
+                    // Check if default is $bindable()
+                    if (
+                      prop.value.right?.type === 'CallExpression' &&
+                      prop.value.right.callee?.name === '$bindable'
+                    ) {
+                      bindableVars.add(varName);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+    });
+
+    if (propsVars.size === 0) return;
+
+    // Step 2: Find assignments to non-bindable $props variables
+    walk(ast.instance.content, {
+      enter(node: any) {
+        if (
+          node.type === 'AssignmentExpression' &&
+          node.left?.type === 'Identifier' &&
+          propsVars.has(node.left.name) &&
+          !bindableVars.has(node.left.name)
+        ) {
+          context.report({
+            node,
+            message: `Prop \`${node.left.name}\` is mutated but not declared with \`$bindable()\`. Use \`let { ${node.left.name} = $bindable() } = $props()\` for two-way binding.`,
+          });
+        }
+      },
+    });
+  },
+};
+```
+
+**Step 5: Implement sv-reactivity-loss-primitive**
+
+Detects `CallExpression` where an argument is an `Identifier` that was destructured from `$props()` as a primitive. This is deliberately heuristic — only flags when a `$props` variable is passed directly as a function argument (not in template expressions, not in reactive contexts).
+
+```typescript
+import { walk } from 'estree-walker';
+import type { Rule } from '../types.js';
+
+export const svReactivityLossPrimitive: Rule = {
+  id: 'sv-reactivity-loss-primitive',
+  severity: 'warning',
+  applicableTo: ['svelte-component'],
+  description: 'Flags $props variables passed as function arguments, which may lose reactivity.',
+  agentPrompt:
+    'Passing a `$props()` variable directly to a function captures its current value, losing reactivity. Wrap in a getter: `() => propVar` or use `$derived()` to compute the result reactively.',
+  analyze: (ast, context) => {
+    if (!ast.instance) return;
+
+    // Step 1: Collect $props() variable names
+    const propsVars = new Set<string>();
+    walk(ast.instance.content, {
+      enter(node: any) {
+        if (node.type === 'VariableDeclaration') {
+          for (const decl of node.declarations) {
+            if (
+              decl.init?.type === 'CallExpression' &&
+              decl.init.callee?.name === '$props' &&
+              decl.id?.type === 'ObjectPattern'
+            ) {
+              for (const prop of decl.id.properties) {
+                if (prop.type === 'Property' && prop.value?.type === 'Identifier') {
+                  propsVars.add(prop.value.name);
+                } else if (prop.type === 'Property' && prop.value?.type === 'AssignmentPattern') {
+                  if (prop.value.left?.name) {
+                    propsVars.add(prop.value.left.name);
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+    });
+
+    if (propsVars.size === 0) return;
+
+    // Step 2: Find function calls in the script (not template) that pass $props vars directly
+    walk(ast.instance.content, {
+      enter(node: any) {
+        if (
+          node.type === 'CallExpression' &&
+          node.callee?.type === 'Identifier' &&
+          // Skip reactive runes — they handle reactivity correctly
+          !['$derived', '$effect', '$state', '$props', '$bindable', '$inspect'].includes(node.callee.name)
+        ) {
+          for (const arg of node.arguments ?? []) {
+            if (arg.type === 'Identifier' && propsVars.has(arg.name)) {
+              context.report({
+                node: arg,
+                message: `Prop \`${arg.name}\` passed directly to \`${node.callee.name}()\` may lose reactivity. Wrap in a getter \`() => ${arg.name}\` or use \`$derived()\`.`,
+              });
+            }
+          }
+        }
+      },
+    });
+  },
+};
+```
+
+**Step 6: Run tests to verify they pass**
+
+Run: `npx vitest run tests/rules/sv-require-bindable-rune.test.ts tests/rules/sv-reactivity-loss-primitive.test.ts`
+Expected: All tests pass.
+
+**Step 7: Commit**
+
+```bash
+git add src/rules/sv-require-bindable-rune.ts src/rules/sv-reactivity-loss-primitive.ts tests/rules/sv-require-bindable-rune.test.ts tests/rules/sv-reactivity-loss-primitive.test.ts tests/fixtures/prop-mutation.svelte tests/fixtures/clean-bindable.svelte tests/fixtures/reactivity-loss.svelte
+git commit -m "feat: add sv-require-bindable-rune and sv-reactivity-loss-primitive rules"
+```
+
+---
+
+### Task 27: Rules — sv-no-magic-props + sv-require-snippet-invocation + sv-no-svelte-component
+
+Group of three snippets/composition rules.
+
+**Files:**
+- Create: `src/rules/sv-no-magic-props.ts`
+- Create: `src/rules/sv-require-snippet-invocation.ts`
+- Create: `src/rules/sv-no-svelte-component.ts`
+- Create: `tests/rules/sv-no-magic-props.test.ts`
+- Create: `tests/rules/sv-require-snippet-invocation.test.ts`
+- Create: `tests/rules/sv-no-svelte-component.test.ts`
+- Create: `tests/fixtures/magic-props.svelte`
+- Create: `tests/fixtures/snippet-no-invoke.svelte`
+- Create: `tests/fixtures/svelte-component.svelte`
+
+**Step 1: Create test fixtures**
+
+`tests/fixtures/magic-props.svelte`:
+```svelte
+<script>
+  let { title } = $props();
+</script>
+
+<div {...$$restProps}>
+  <h1>{title}</h1>
+  <pre>{JSON.stringify($$props)}</pre>
+</div>
+```
+
+`tests/fixtures/snippet-no-invoke.svelte`:
+```svelte
+<script>
+  let { header, children } = $props();
+</script>
+
+<div>
+  {@render header}
+  {@render children}
+</div>
+```
+
+`tests/fixtures/svelte-component.svelte`:
+```svelte
+<script>
+  let { component } = $props();
+</script>
+
+<svelte:component this={component} />
+```
+
+**Step 2: Write failing tests**
+
+`tests/rules/sv-no-magic-props.test.ts`:
+```typescript
+import { describe, it, expect } from 'vitest';
+import { svNoMagicProps } from '../../src/rules/sv-no-magic-props.js';
+import { analyzeFile } from '../../src/engine.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+function analyzeFixture(fixtureName: string) {
+  const fixturePath = path.join(__dirname, '../fixtures', fixtureName);
+  const source = fs.readFileSync(fixturePath, 'utf-8');
+  return analyzeFile({
+    filePath: fixturePath,
+    fileRole: 'svelte-component',
+    source,
+    rules: [svNoMagicProps],
+  });
+}
+
+describe('sv-no-magic-props', () => {
+  it('flags $$props and $$restProps usage', () => {
+    const diagnostics = analyzeFixture('magic-props.svelte');
+    expect(diagnostics.length).toBeGreaterThanOrEqual(2); // $$restProps + $$props
+  });
+
+  it('passes clean $props() destructuring', () => {
+    const diagnostics = analyzeFixture('clean-runes.svelte');
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('is fixable', () => {
+    expect(svNoMagicProps.fix).toBeDefined();
+  });
+
+  it('has correct metadata', () => {
+    expect(svNoMagicProps.id).toBe('sv-no-magic-props');
+    expect(svNoMagicProps.severity).toBe('error');
+    expect(svNoMagicProps.applicableTo).toContain('svelte-component');
+  });
+});
+```
+
+`tests/rules/sv-require-snippet-invocation.test.ts`:
+```typescript
+import { describe, it, expect } from 'vitest';
+import { svRequireSnippetInvocation } from '../../src/rules/sv-require-snippet-invocation.js';
+import { analyzeFile } from '../../src/engine.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+function analyzeFixture(fixtureName: string) {
+  const fixturePath = path.join(__dirname, '../fixtures', fixtureName);
+  const source = fs.readFileSync(fixturePath, 'utf-8');
+  return analyzeFile({
+    filePath: fixturePath,
+    fileRole: 'svelte-component',
+    source,
+    rules: [svRequireSnippetInvocation],
+  });
+}
+
+describe('sv-require-snippet-invocation', () => {
+  it('flags {@render foo} without parentheses', () => {
+    const diagnostics = analyzeFixture('snippet-no-invoke.svelte');
+    expect(diagnostics.length).toBeGreaterThanOrEqual(2); // header + children
+    expect(diagnostics[0].message).toContain('()');
+  });
+
+  it('passes clean {@render children?.()} usage', () => {
+    const diagnostics = analyzeFixture('clean-snippet.svelte');
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('is fixable', () => {
+    expect(svRequireSnippetInvocation.fix).toBeDefined();
+  });
+
+  it('has correct metadata', () => {
+    expect(svRequireSnippetInvocation.id).toBe('sv-require-snippet-invocation');
+    expect(svRequireSnippetInvocation.severity).toBe('error');
+    expect(svRequireSnippetInvocation.applicableTo).toContain('svelte-component');
+  });
+});
+```
+
+`tests/rules/sv-no-svelte-component.test.ts`:
+```typescript
+import { describe, it, expect } from 'vitest';
+import { svNoSvelteComponent } from '../../src/rules/sv-no-svelte-component.js';
+import { analyzeFile } from '../../src/engine.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+function analyzeFixture(fixtureName: string) {
+  const fixturePath = path.join(__dirname, '../fixtures', fixtureName);
+  const source = fs.readFileSync(fixturePath, 'utf-8');
+  return analyzeFile({
+    filePath: fixturePath,
+    fileRole: 'svelte-component',
+    source,
+    rules: [svNoSvelteComponent],
+  });
+}
+
+describe('sv-no-svelte-component', () => {
+  it('flags <svelte:component this={...} />', () => {
+    const diagnostics = analyzeFixture('svelte-component.svelte');
+    expect(diagnostics.length).toBeGreaterThanOrEqual(1);
+    expect(diagnostics[0].message).toContain('svelte:component');
+  });
+
+  it('passes clean component rendering', () => {
+    const diagnostics = analyzeFixture('clean-runes.svelte');
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('is not fixable', () => {
+    expect(svNoSvelteComponent.fix).toBeUndefined();
+  });
+
+  it('has correct metadata', () => {
+    expect(svNoSvelteComponent.id).toBe('sv-no-svelte-component');
+    expect(svNoSvelteComponent.severity).toBe('warning');
+    expect(svNoSvelteComponent.applicableTo).toContain('svelte-component');
+  });
+});
+```
+
+**Step 3: Run tests to verify they fail**
+
+Run: `npx vitest run tests/rules/sv-no-magic-props.test.ts tests/rules/sv-require-snippet-invocation.test.ts tests/rules/sv-no-svelte-component.test.ts`
+Expected: FAIL
+
+**Step 4: Implement sv-no-magic-props**
+
+Detects `Identifier` nodes where name is `$$props` or `$$restProps`.
+
+```typescript
+import { walk } from 'estree-walker';
+import type { Rule } from '../types.js';
+
+export const svNoMagicProps: Rule = {
+  id: 'sv-no-magic-props',
+  severity: 'error',
+  applicableTo: ['svelte-component'],
+  description: 'Flags $$props and $$restProps usage. Use $props() destructuring with rest pattern.',
+  agentPrompt:
+    'Svelte 5 removes `$$props` and `$$restProps`. Use `let { known, ...rest } = $props();` for rest props and access all props via the destructured pattern.',
+  analyze: (ast, context) => {
+    // Walk both script and template ASTs
+    const roots = [ast.instance?.content, ast.fragment].filter(Boolean);
+
+    for (const root of roots) {
+      walk(root, {
+        enter(node: any) {
+          if (
+            node.type === 'Identifier' &&
+            (node.name === '$$props' || node.name === '$$restProps')
+          ) {
+            context.report({
+              node,
+              message: `\`${node.name}\` is removed in Svelte 5. Use \`let { ...rest } = $props();\` instead.`,
+            });
+          }
+        },
+      });
+    }
+  },
+  fix: (source, _diagnostic) => {
+    let result = source;
+    result = result.replace(/\$\$restProps/g, '...rest /* TODO: add rest to $props() destructuring */');
+    result = result.replace(/\$\$props/g, '$$props /* TODO: replace with $props() destructuring */');
+    return result !== source ? result : null;
+  },
+};
+```
+
+**Step 5: Implement sv-require-snippet-invocation**
+
+Detects `RenderTag` where expression is an `Identifier` (not a `CallExpression`), meaning `{@render foo}` without `()`.
+
+```typescript
+import { walk } from 'estree-walker';
+import type { Rule } from '../types.js';
+
+export const svRequireSnippetInvocation: Rule = {
+  id: 'sv-require-snippet-invocation',
+  severity: 'error',
+  applicableTo: ['svelte-component'],
+  description: 'Flags {@render snippet} without parentheses invocation.',
+  agentPrompt:
+    'Snippets must be invoked with parentheses. Change `{@render foo}` to `{@render foo()}` or `{@render foo?.()}`.',
+  analyze: (ast, context) => {
+    if (!ast.fragment) return;
+
+    walk(ast.fragment, {
+      enter(node: any) {
+        if (
+          node.type === 'RenderTag' &&
+          node.expression?.type === 'Identifier'
+        ) {
+          context.report({
+            node,
+            message: `\`{@render ${node.expression.name}}\` is missing parentheses. Use \`{@render ${node.expression.name}()}\` or \`{@render ${node.expression.name}?.()}\`.`,
+          });
+        }
+      },
+    });
+  },
+  fix: (source, _diagnostic) => {
+    // Fix {@render identifier} -> {@render identifier()}
+    const result = source.replace(
+      /\{@render\s+(\w+)\s*\}/g,
+      '{@render $1()}'
+    );
+    return result !== source ? result : null;
+  },
+};
+```
+
+**Step 6: Implement sv-no-svelte-component**
+
+Detects `SvelteComponent` nodes in the template AST.
+
+```typescript
+import { walk } from 'estree-walker';
+import type { Rule } from '../types.js';
+
+export const svNoSvelteComponent: Rule = {
+  id: 'sv-no-svelte-component',
+  severity: 'warning',
+  applicableTo: ['svelte-component'],
+  description: 'Flags <svelte:component this={...} /> usage.',
+  agentPrompt:
+    'Svelte 5 supports dynamic components directly: `<MyComponent />` where `MyComponent` is a variable. Replace `<svelte:component this={comp} />` with `<comp />` (or `{@const Tag = comp} <Tag />` if needed).',
+  analyze: (ast, context) => {
+    if (!ast.fragment) return;
+
+    walk(ast.fragment, {
+      enter(node: any) {
+        if (node.type === 'SvelteComponent') {
+          context.report({
+            node,
+            message: '`<svelte:component this={...}>` is deprecated in Svelte 5. Use the component variable directly as a tag: `<Component />`.',
+          });
+        }
+      },
+    });
+  },
+};
+```
+
+**Step 7: Run tests to verify they pass**
+
+Run: `npx vitest run tests/rules/sv-no-magic-props.test.ts tests/rules/sv-require-snippet-invocation.test.ts tests/rules/sv-no-svelte-component.test.ts`
+Expected: All tests pass.
+
+**Step 8: Commit**
+
+```bash
+git add src/rules/sv-no-magic-props.ts src/rules/sv-require-snippet-invocation.ts src/rules/sv-no-svelte-component.ts tests/rules/sv-no-magic-props.test.ts tests/rules/sv-require-snippet-invocation.test.ts tests/rules/sv-no-svelte-component.test.ts tests/fixtures/magic-props.svelte tests/fixtures/snippet-no-invoke.svelte tests/fixtures/svelte-component.svelte
+git commit -m "feat: add sv-no-magic-props, sv-require-snippet-invocation, and sv-no-svelte-component rules"
+```
+
+---
+
+### Task 28: Rules — kit-no-goto-in-server + perf-prefer-state-raw + perf-no-function-derived
+
+Group of remaining rules covering SvelteKit boundary enforcement and performance.
+
+**Files:**
+- Create: `src/rules/kit-no-goto-in-server.ts`
+- Create: `src/rules/perf-prefer-state-raw.ts`
+- Create: `src/rules/perf-no-function-derived.ts`
+- Create: `tests/rules/kit-no-goto-in-server.test.ts`
+- Create: `tests/rules/perf-prefer-state-raw.test.ts`
+- Create: `tests/rules/perf-no-function-derived.test.ts`
+- Create: `tests/fixtures/goto-in-server.ts`
+- Create: `tests/fixtures/large-state.svelte`
+- Create: `tests/fixtures/function-derived.svelte`
+
+**Step 1: Create test fixtures**
+
+`tests/fixtures/goto-in-server.ts`:
+```typescript
+import { goto } from '$app/navigation';
+import { redirect } from '@sveltejs/kit';
+
+export async function load({ params }) {
+  if (!params.id) {
+    goto('/');
+  }
+  return { id: params.id };
+}
+```
+
+`tests/fixtures/clean-redirect-server.ts`:
+```typescript
+import { redirect } from '@sveltejs/kit';
+
+export async function load({ params }) {
+  if (!params.id) {
+    throw redirect(302, '/');
+  }
+  return { id: params.id };
+}
+```
+
+`tests/fixtures/large-state.svelte`:
+```svelte
+<script>
+  let items = $state([
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+    11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+    21, 22, 23, 24, 25
+  ]);
+
+  let config = $state({
+    a: 1, b: 2, c: 3, d: 4, e: 5,
+    f: 6, g: 7, h: 8, i: 9, j: 10,
+    k: 11
+  });
+</script>
+
+<p>{items.length} {Object.keys(config).length}</p>
+```
+
+`tests/fixtures/clean-state-raw.svelte`:
+```svelte
+<script>
+  let items = $state.raw([1, 2, 3]);
+  let config = $state({ a: 1, b: 2 });
+</script>
+
+<p>{items.length}</p>
+```
+
+`tests/fixtures/function-derived.svelte`:
+```svelte
+<script>
+  let count = $state(0);
+  let doubled = $derived(() => count * 2);
+  let tripled = $derived(() => count * 3);
+</script>
+
+<p>{doubled} {tripled}</p>
+```
+
+`tests/fixtures/clean-derived-expr.svelte`:
+```svelte
+<script>
+  let count = $state(0);
+  let doubled = $derived(count * 2);
+  let tripled = $derived(count * 3);
+</script>
+
+<p>{doubled} {tripled}</p>
+```
+
+**Step 2: Write failing tests**
+
+`tests/rules/kit-no-goto-in-server.test.ts`:
+```typescript
+import { describe, it, expect } from 'vitest';
+import { kitNoGotoInServer } from '../../src/rules/kit-no-goto-in-server.js';
+import { analyzeFile } from '../../src/engine.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+function analyzeFixture(fixtureName: string, fileRole: 'page-server' | 'layout-server' | 'server-endpoint') {
+  const fixturePath = path.join(__dirname, '../fixtures', fixtureName);
+  const source = fs.readFileSync(fixturePath, 'utf-8');
+  return analyzeFile({
+    filePath: fixturePath,
+    fileRole,
+    source,
+    rules: [kitNoGotoInServer],
+  });
+}
+
+describe('kit-no-goto-in-server', () => {
+  it('flags goto import from $app/navigation in server files', () => {
+    const diagnostics = analyzeFixture('goto-in-server.ts', 'page-server');
+    expect(diagnostics.length).toBeGreaterThanOrEqual(1);
+    expect(diagnostics[0].message).toContain('goto');
+  });
+
+  it('passes server file without goto', () => {
+    const diagnostics = analyzeFixture('clean-redirect-server.ts', 'page-server');
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('is not fixable', () => {
+    expect(kitNoGotoInServer.fix).toBeUndefined();
+  });
+
+  it('has correct metadata', () => {
+    expect(kitNoGotoInServer.id).toBe('kit-no-goto-in-server');
+    expect(kitNoGotoInServer.severity).toBe('error');
+    expect(kitNoGotoInServer.applicableTo).toContain('page-server');
+    expect(kitNoGotoInServer.applicableTo).toContain('layout-server');
+    expect(kitNoGotoInServer.applicableTo).toContain('server-endpoint');
+  });
+});
+```
+
+`tests/rules/perf-prefer-state-raw.test.ts`:
+```typescript
+import { describe, it, expect } from 'vitest';
+import { perfPreferStateRaw } from '../../src/rules/perf-prefer-state-raw.js';
+import { analyzeFile } from '../../src/engine.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+function analyzeFixture(fixtureName: string) {
+  const fixturePath = path.join(__dirname, '../fixtures', fixtureName);
+  const source = fs.readFileSync(fixturePath, 'utf-8');
+  return analyzeFile({
+    filePath: fixturePath,
+    fileRole: 'svelte-component',
+    source,
+    rules: [perfPreferStateRaw],
+  });
+}
+
+describe('perf-prefer-state-raw', () => {
+  it('flags $state() with large array or object literal', () => {
+    const diagnostics = analyzeFixture('large-state.svelte');
+    expect(diagnostics.length).toBeGreaterThanOrEqual(2); // items (>20 elements) + config (>10 properties)
+  });
+
+  it('passes small $state or $state.raw usage', () => {
+    const diagnostics = analyzeFixture('clean-state-raw.svelte');
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('is not fixable', () => {
+    expect(perfPreferStateRaw.fix).toBeUndefined();
+  });
+
+  it('has correct metadata', () => {
+    expect(perfPreferStateRaw.id).toBe('perf-prefer-state-raw');
+    expect(perfPreferStateRaw.severity).toBe('warning');
+    expect(perfPreferStateRaw.applicableTo).toContain('svelte-component');
+  });
+});
+```
+
+`tests/rules/perf-no-function-derived.test.ts`:
+```typescript
+import { describe, it, expect } from 'vitest';
+import { perfNoFunctionDerived } from '../../src/rules/perf-no-function-derived.js';
+import { analyzeFile } from '../../src/engine.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+function analyzeFixture(fixtureName: string) {
+  const fixturePath = path.join(__dirname, '../fixtures', fixtureName);
+  const source = fs.readFileSync(fixturePath, 'utf-8');
+  return analyzeFile({
+    filePath: fixturePath,
+    fileRole: 'svelte-component',
+    source,
+    rules: [perfNoFunctionDerived],
+  });
+}
+
+describe('perf-no-function-derived', () => {
+  it('flags $derived(() => expr) with arrow function expression body', () => {
+    const diagnostics = analyzeFixture('function-derived.svelte');
+    expect(diagnostics.length).toBeGreaterThanOrEqual(2); // doubled + tripled
+    expect(diagnostics[0].message).toContain('$derived');
+  });
+
+  it('passes $derived(expr) without wrapping arrow function', () => {
+    const diagnostics = analyzeFixture('clean-derived-expr.svelte');
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('is fixable', () => {
+    expect(perfNoFunctionDerived.fix).toBeDefined();
+  });
+
+  it('fixes $derived(() => expr) to $derived(expr)', () => {
+    const source = '<script>\n  let doubled = $derived(() => count * 2);\n</script>';
+    const diagnostic = {
+      ruleId: 'perf-no-function-derived',
+      severity: 'warning' as const,
+      filePath: 'test.svelte',
+      line: 2,
+      column: 2,
+      message: 'test',
+      agentInstruction: 'test',
+      fixable: true,
+    };
+    const result = perfNoFunctionDerived.fix!(source, diagnostic);
+    expect(result).toContain('$derived(count * 2)');
+    expect(result).not.toContain('=>');
+  });
+
+  it('has correct metadata', () => {
+    expect(perfNoFunctionDerived.id).toBe('perf-no-function-derived');
+    expect(perfNoFunctionDerived.severity).toBe('warning');
+    expect(perfNoFunctionDerived.applicableTo).toContain('svelte-component');
+  });
+});
+```
+
+**Step 3: Run tests to verify they fail**
+
+Run: `npx vitest run tests/rules/kit-no-goto-in-server.test.ts tests/rules/perf-prefer-state-raw.test.ts tests/rules/perf-no-function-derived.test.ts`
+Expected: FAIL
+
+**Step 4: Implement kit-no-goto-in-server**
+
+Detects `ImportDeclaration` where source is `$app/navigation` containing `goto` specifier in server files.
+
+```typescript
+import { walk } from 'estree-walker';
+import type { Rule } from '../types.js';
+
+export const kitNoGotoInServer: Rule = {
+  id: 'kit-no-goto-in-server',
+  severity: 'error',
+  applicableTo: ['page-server', 'layout-server', 'server-endpoint'],
+  description: 'Flags goto() import from $app/navigation in server files.',
+  agentPrompt:
+    '`goto()` is a client-side navigation function and cannot be used in server files. Use `throw redirect(302, url)` from `@sveltejs/kit` instead.',
+  analyze: (ast, context) => {
+    if (!ast.body) return;
+
+    walk(ast, {
+      enter(node: any) {
+        if (
+          node.type === 'ImportDeclaration' &&
+          node.source?.value === '$app/navigation'
+        ) {
+          const hasGoto = node.specifiers?.some(
+            (s: any) =>
+              s.type === 'ImportSpecifier' &&
+              (s.imported?.name === 'goto' || s.local?.name === 'goto')
+          );
+          if (hasGoto) {
+            context.report({
+              node,
+              message: '`goto()` from `$app/navigation` cannot be used in server files. Use `throw redirect(302, url)` from `@sveltejs/kit` instead.',
+            });
+          }
+        }
+      },
+    });
+  },
+};
+```
+
+**Step 5: Implement perf-prefer-state-raw**
+
+Detects `$state()` where initializer is an array literal with >20 elements or an object literal with >10 properties.
+
+```typescript
+import { walk } from 'estree-walker';
+import type { Rule } from '../types.js';
+
+export const perfPreferStateRaw: Rule = {
+  id: 'perf-prefer-state-raw',
+  severity: 'warning',
+  applicableTo: ['svelte-component'],
+  description: 'Suggests $state.raw() for large data structures to avoid deep reactivity overhead.',
+  agentPrompt:
+    'Large arrays (>20 items) and objects (>10 properties) in `$state()` create deep reactive proxies with significant overhead. Use `$state.raw()` instead and trigger updates by reassignment: `items = [...items, newItem]`.',
+  analyze: (ast, context) => {
+    if (!ast.instance) return;
+
+    walk(ast.instance.content, {
+      enter(node: any) {
+        if (
+          node.type === 'VariableDeclaration'
+        ) {
+          for (const decl of node.declarations) {
+            if (
+              decl.init?.type === 'CallExpression' &&
+              decl.init.callee?.name === '$state' &&
+              decl.init.arguments?.[0]
+            ) {
+              const arg = decl.init.arguments[0];
+              const varName = decl.id?.name ?? 'variable';
+
+              // Check array literal with >20 elements
+              if (arg.type === 'ArrayExpression' && arg.elements?.length > 20) {
+                context.report({
+                  node: decl,
+                  message: `\`$state()\` for \`${varName}\` contains ${arg.elements.length} array elements. Consider \`$state.raw()\` to avoid deep reactivity overhead.`,
+                });
+              }
+
+              // Check object literal with >10 properties
+              if (arg.type === 'ObjectExpression' && arg.properties?.length > 10) {
+                context.report({
+                  node: decl,
+                  message: `\`$state()\` for \`${varName}\` contains ${arg.properties.length} object properties. Consider \`$state.raw()\` to avoid deep reactivity overhead.`,
+                });
+              }
+            }
+          }
+        }
+      },
+    });
+  },
+};
+```
+
+**Step 6: Implement perf-no-function-derived**
+
+Detects `$derived()` where first argument is an `ArrowFunctionExpression` with expression body (not block body).
+
+```typescript
+import { walk } from 'estree-walker';
+import type { Rule } from '../types.js';
+
+export const perfNoFunctionDerived: Rule = {
+  id: 'perf-no-function-derived',
+  severity: 'warning',
+  applicableTo: ['svelte-component'],
+  description: 'Flags $derived(() => expr) which should be $derived(expr).',
+  agentPrompt:
+    '`$derived(() => expr)` wraps the expression in an unnecessary arrow function. Use `$derived(expr)` directly for better readability and slight performance improvement. Use `$derived.by(() => { ... })` only for multi-statement derivations.',
+  analyze: (ast, context) => {
+    if (!ast.instance) return;
+
+    walk(ast.instance.content, {
+      enter(node: any) {
+        if (
+          node.type === 'VariableDeclaration'
+        ) {
+          for (const decl of node.declarations) {
+            if (
+              decl.init?.type === 'CallExpression' &&
+              decl.init.callee?.name === '$derived' &&
+              decl.init.arguments?.[0]?.type === 'ArrowFunctionExpression' &&
+              decl.init.arguments[0].expression === true // expression body, not block body
+            ) {
+              const varName = decl.id?.name ?? 'variable';
+              context.report({
+                node: decl,
+                message: `\`$derived(() => expr)\` for \`${varName}\` should be \`$derived(expr)\`. Remove the arrow function wrapper.`,
+              });
+            }
+          }
+        }
+      },
+    });
+  },
+  fix: (source, _diagnostic) => {
+    // Fix $derived(() => expr) -> $derived(expr)
+    const result = source.replace(
+      /\$derived\(\(\)\s*=>\s*([^)]+)\)/g,
+      '$derived($1)'
+    );
+    return result !== source ? result : null;
+  },
+};
+```
+
+**Step 7: Run tests to verify they pass**
+
+Run: `npx vitest run tests/rules/kit-no-goto-in-server.test.ts tests/rules/perf-prefer-state-raw.test.ts tests/rules/perf-no-function-derived.test.ts`
+Expected: All tests pass.
+
+**Step 8: Update the rule registry**
+
+After all rules from Tasks 23-28 are implemented, update `src/rules/index.ts` to import and export all 22 rules as specified in Task 14.
+
+Run: `npx vitest run`
+Expected: All tests pass with all 22 rules registered.
+
+**Step 9: Commit**
+
+```bash
+git add src/rules/kit-no-goto-in-server.ts src/rules/perf-prefer-state-raw.ts src/rules/perf-no-function-derived.ts tests/rules/kit-no-goto-in-server.test.ts tests/rules/perf-prefer-state-raw.test.ts tests/rules/perf-no-function-derived.test.ts tests/fixtures/goto-in-server.ts tests/fixtures/clean-redirect-server.ts tests/fixtures/large-state.svelte tests/fixtures/clean-state-raw.svelte tests/fixtures/function-derived.svelte tests/fixtures/clean-derived-expr.svelte src/rules/index.ts
+git commit -m "feat: add kit-no-goto-in-server, perf-prefer-state-raw, and perf-no-function-derived rules"
 ```
