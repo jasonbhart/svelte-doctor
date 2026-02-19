@@ -4,16 +4,12 @@
   "description": "Diagnose and fix Svelte 5 anti-patterns in your codebase",
   "type": "module",
   "bin": {
-    "svelte-doctor": "./dist/cli.js"
+    "svelte-doctor": "./dist/cli.mjs"
   },
   "exports": {
     ".": {
-      "types": "./dist/cli.d.ts",
-      "default": "./dist/cli.js"
-    },
-    "./api": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
     }
   },
   "files": ["dist"],
