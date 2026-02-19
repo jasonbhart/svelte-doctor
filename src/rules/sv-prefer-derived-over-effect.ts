@@ -7,7 +7,7 @@ export const svPreferDerivedOverEffect: Rule = {
   applicableTo: ['svelte-component'],
   description: 'Flags $effect() that could be replaced with $derived().',
   agentPrompt:
-    'This `$effect()` only assigns a single variable from a computation. Replace with `$derived()`: `let x = $derived(expr);` instead of `$effect(() => { x = expr; })`.',
+    'This `$effect()` only assigns a single variable from a computation. Replace with `$derived()`: `let x = $derived(expr);` instead of `$effect(() => { x = expr; })`. Skip if the variable is also written by event handlers or is a `$bindable` prop.',
   analyze: (ast, context) => {
     if (!ast.instance) return;
 
@@ -32,7 +32,7 @@ export const svPreferDerivedOverEffect: Rule = {
               const varName = stmt.expression.left?.name ?? 'variable';
               context.report({
                 node,
-                message: `\`$effect()\` only assigns \`${varName}\`. Use \`let ${varName} = $derived(expr)\` instead for reactive derivation.`,
+                message: `\`$effect()\` only assigns \`${varName}\`. Use \`let ${varName} = $derived(expr)\` instead — unless \`${varName}\` is also written elsewhere (e.g. event handlers, \`$bindable\` props).`,
               });
             }
           }
