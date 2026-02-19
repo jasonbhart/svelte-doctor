@@ -33,7 +33,7 @@ describe('sv-no-svelte-component', () => {
 
   it('has correct metadata', () => {
     expect(svNoSvelteComponent.id).toBe('sv-no-svelte-component');
-    expect(svNoSvelteComponent.severity).toBe('warning');
+    expect(svNoSvelteComponent.severity).toBe('error');
     expect(svNoSvelteComponent.applicableTo).toContain('svelte-component');
   });
 });

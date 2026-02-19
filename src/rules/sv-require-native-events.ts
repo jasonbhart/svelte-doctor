@@ -3,7 +3,7 @@ import type { Rule } from '../types.js';
 
 export const svRequireNativeEvents: Rule = {
   id: 'sv-require-native-events',
-  severity: 'warning',
+  severity: 'error',
   applicableTo: ['svelte-component'],
   description: 'Flags on:event directive syntax. Use onevent attributes instead.',
   agentPrompt:

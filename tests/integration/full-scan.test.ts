@@ -24,10 +24,9 @@ describe('integration: full scan', () => {
     expect(ruleIds.has('perf-no-load-waterfalls')).toBe(true);
 
     // Score should be degraded with this many violations
-    // 6 errors * 3 + 4 warnings * 1 = 22 penalty => score 78
-    // Once sv-no-reactive-statements is added (Task 23), this will drop below 75
-    expect(result.score.score).toBeLessThan(80);
-    expect(result.score.label).toBe('Good');
+    // With sv-no-reactive-statements now active, score drops below 75
+    expect(result.score.score).toBeLessThan(75);
+    expect(result.score.label).toBe('Needs Work');
   });
 
   it('respects rule ignoring via config', async () => {

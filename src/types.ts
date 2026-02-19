@@ -62,5 +62,4 @@ export interface SvelteDoctorConfig {
     files?: string[];
   };
   verbose?: boolean;
-  diff?: boolean | string;
 }

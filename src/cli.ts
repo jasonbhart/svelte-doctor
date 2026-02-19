@@ -1,27 +1,49 @@
 #!/usr/bin/env node
+import { createRequire } from 'node:module';
 import { program } from 'commander';
 import ora from 'ora';
+import * as readline from 'node:readline';
 import { diagnose } from './index.js';
 import { formatTerminalReport } from './reporters/terminal.js';
 import { formatAgentReport } from './reporters/agent.js';
 
+async function confirm(message: string): Promise<boolean> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(`${message} (y/N) `, (answer) => {
+      rl.close();
+      resolve(answer.toLowerCase() === 'y');
+    });
+  });
+}
+
+const require = createRequire(import.meta.url);
+const pkg = require('../package.json');
+
 program
   .name('svelte-doctor')
   .description('Diagnose and fix Svelte 5 anti-patterns in your codebase')
-  .version('0.0.1')
+  .version(pkg.version)
   .argument('[directory]', 'Directory to scan', '.')
   .option('--verbose', 'Show file details per rule')
   .option('--score', 'Output only the score')
   .option('--agent', 'Output structured XML for LLM consumption')
   .option('--fix', 'Auto-fix all fixable issues')
-  .option('--diff [base]', 'Scan only changed files vs base branch')
   .option('-y, --yes', 'Skip prompts')
   .action(async (directory, options) => {
     const spinner = ora('Scanning...').start();
 
     try {
+      const confirmFix = options.fix && !options.yes
+        ? async (fixableCount: number) => {
+            spinner.stop();
+            return confirm(`Found ${fixableCount} fixable issue(s). Apply fixes?`);
+          }
+        : undefined;
+
       const result = await diagnose(directory, {
         fix: options.fix,
+        confirmFix,
       });
 
       spinner.stop();

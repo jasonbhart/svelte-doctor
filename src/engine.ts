@@ -29,6 +29,8 @@ export function analyzeFile(options: AnalyzeFileOptions): Diagnostic[] {
   if (!ast) return diagnostics;
 
   // Run each applicable rule
+  const sourceLines = source.split('\n');
+
   for (const rule of applicableRules) {
     const context = {
       filePath,
@@ -37,21 +39,30 @@ export function analyzeFile(options: AnalyzeFileOptions): Diagnostic[] {
       report: (info: { node: any; message: string }) => {
         const line = info.node.loc?.start?.line ?? info.node.start ?? 1;
         const column = info.node.loc?.start?.column ?? 0;
+        const resolvedLine = typeof line === 'number' && line > 0 ? line : 1;
+        const codeSnippet = sourceLines[resolvedLine - 1]?.trim() || undefined;
 
         diagnostics.push({
           ruleId: rule.id,
           severity: rule.severity,
           filePath,
-          line: typeof line === 'number' && line > 0 ? line : 1,
+          line: resolvedLine,
           column: typeof column === 'number' ? column : 0,
           message: info.message,
           agentInstruction: rule.agentPrompt,
           fixable: typeof rule.fix === 'function',
+          codeSnippet,
         });
       },
     };
 
-    rule.analyze(ast, context);
+    try {
+      rule.analyze(ast, context);
+    } catch (err) {
+      console.warn(
+        `Warning: Rule "${rule.id}" threw while analyzing ${filePath}: ${err instanceof Error ? err.message : err}`
+      );
+    }
   }
 
   return diagnostics;

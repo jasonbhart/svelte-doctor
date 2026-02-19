@@ -27,14 +27,6 @@ export function formatTerminalReport(
     return lines.join('\n');
   }
 
-  // Group by rule
-  const byRule = new Map<string, Diagnostic[]>();
-  for (const d of diagnostics) {
-    const existing = byRule.get(d.ruleId) ?? [];
-    existing.push(d);
-    byRule.set(d.ruleId, existing);
-  }
-
   const errorCount = diagnostics.filter((d) => d.severity === 'error').length;
   const warningCount = diagnostics.filter((d) => d.severity === 'warning').length;
 
@@ -43,20 +35,46 @@ export function formatTerminalReport(
   );
   lines.push('');
 
-  for (const [ruleId, ruleDiags] of byRule) {
-    const severity = ruleDiags[0].severity;
-    const icon = severity === 'error' ? pc.red('x') : pc.yellow('!');
-    const fixable = ruleDiags[0].fixable ? pc.dim(' (fixable)') : '';
-
-    lines.push(`  ${icon} ${pc.bold(ruleId)} (${ruleDiags.length})${fixable}`);
-
-    if (verbose) {
-      for (const d of ruleDiags) {
-        lines.push(pc.dim(`    ${d.filePath}:${d.line} - ${d.message}`));
-      }
+  if (verbose) {
+    // Group by file path
+    const byFile = new Map<string, Diagnostic[]>();
+    for (const d of diagnostics) {
+      const existing = byFile.get(d.filePath) ?? [];
+      existing.push(d);
+      byFile.set(d.filePath, existing);
     }
 
-    lines.push('');
+    for (const [filePath, fileDiags] of byFile) {
+      lines.push(`  ${pc.underline(filePath)}`);
+
+      for (const d of fileDiags) {
+        const sevLabel =
+          d.severity === 'error' ? pc.red('error') : pc.yellow('warning');
+        const fixable = d.fixable ? pc.dim(' (fixable)') : '';
+        lines.push(
+          `    ${d.line}:${d.column}  ${sevLabel}  ${pc.bold(d.ruleId)}  ${d.message}${fixable}`
+        );
+      }
+
+      lines.push('');
+    }
+  } else {
+    // Non-verbose: show summary by rule
+    const byRule = new Map<string, Diagnostic[]>();
+    for (const d of diagnostics) {
+      const existing = byRule.get(d.ruleId) ?? [];
+      existing.push(d);
+      byRule.set(d.ruleId, existing);
+    }
+
+    for (const [ruleId, ruleDiags] of byRule) {
+      const severity = ruleDiags[0].severity;
+      const icon = severity === 'error' ? pc.red('x') : pc.yellow('!');
+      const fixable = ruleDiags[0].fixable ? pc.dim(' (fixable)') : '';
+
+      lines.push(`  ${icon} ${pc.bold(ruleId)} (${ruleDiags.length})${fixable}`);
+      lines.push('');
+    }
   }
 
   return lines.join('\n');

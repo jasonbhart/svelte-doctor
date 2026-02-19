@@ -3,7 +3,7 @@ import type { Rule } from '../types.js';
 
 export const svPreferSnippets: Rule = {
   id: 'sv-prefer-snippets',
-  severity: 'warning',
+  severity: 'error',
   applicableTo: ['svelte-component'],
   description: 'Flags legacy <slot> usage. Use {#snippet} and {@render} instead.',
   agentPrompt:

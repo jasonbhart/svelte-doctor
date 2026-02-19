@@ -3,7 +3,7 @@ import type { Rule } from '../types.js';
 
 export const svNoEventModifiers: Rule = {
   id: 'sv-no-event-modifiers',
-  severity: 'warning',
+  severity: 'error',
   applicableTo: ['svelte-component'],
   description: 'Flags on:event|modifier syntax. Modifiers need manual refactoring to inline code.',
   agentPrompt:

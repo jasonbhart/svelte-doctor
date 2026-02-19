@@ -33,7 +33,7 @@ describe('sv-no-event-modifiers', () => {
 
   it('has correct metadata', () => {
     expect(svNoEventModifiers.id).toBe('sv-no-event-modifiers');
-    expect(svNoEventModifiers.severity).toBe('warning');
+    expect(svNoEventModifiers.severity).toBe('error');
     expect(svNoEventModifiers.applicableTo).toContain('svelte-component');
   });
 });

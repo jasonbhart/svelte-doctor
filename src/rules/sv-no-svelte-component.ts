@@ -3,7 +3,7 @@ import type { Rule } from '../types.js';
 
 export const svNoSvelteComponent: Rule = {
   id: 'sv-no-svelte-component',
-  severity: 'warning',
+  severity: 'error',
   applicableTo: ['svelte-component'],
   description: 'Flags <svelte:component this={...} /> usage.',
   agentPrompt:
