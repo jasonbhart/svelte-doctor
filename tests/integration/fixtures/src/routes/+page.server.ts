@@ -1,3 +1,5 @@
+import { goto } from '$app/navigation';
+
 let cache = new Map();
 
 export async function load({ fetch }) {

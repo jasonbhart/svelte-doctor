@@ -8,12 +8,13 @@ describe('integration: full scan', () => {
   it('detects all expected violations in the fixture project', async () => {
     const result = await diagnose(FIXTURES_ROOT);
 
-    // Should have scanned all 3 files
-    expect(result.filesScanned).toBe(3);
+    // Should have scanned all 5 files (3 original + RunesComponent.svelte + client.ts)
+    expect(result.filesScanned).toBe(5);
 
     // Check that expected rules fired
     const ruleIds = new Set(result.diagnostics.map((d) => d.ruleId));
 
+    // Original 8 rules
     expect(ruleIds.has('sv-no-export-let')).toBe(true);
     expect(ruleIds.has('sv-no-event-dispatcher')).toBe(true);
     expect(ruleIds.has('sv-require-native-events')).toBe(true);
@@ -23,9 +24,22 @@ describe('integration: full scan', () => {
     expect(ruleIds.has('kit-server-only-secrets')).toBe(true);
     expect(ruleIds.has('perf-no-load-waterfalls')).toBe(true);
 
-    // Score should be degraded with this many violations
-    // With sv-no-reactive-statements now active, score drops below 75
-    expect(result.score.score).toBeLessThan(75);
+    // Newly covered rules (11 additional, 19 total)
+    expect(ruleIds.has('sv-no-reactive-statements')).toBe(true);
+    expect(ruleIds.has('sv-no-magic-props')).toBe(true);
+    expect(ruleIds.has('sv-no-svelte-component')).toBe(true);
+    expect(ruleIds.has('sv-no-effect-state-mutation')).toBe(true);
+    expect(ruleIds.has('sv-prefer-derived-over-effect')).toBe(true);
+    expect(ruleIds.has('sv-no-stale-derived-let')).toBe(true);
+    expect(ruleIds.has('sv-reactivity-loss-primitive')).toBe(true);
+    expect(ruleIds.has('sv-require-bindable-rune')).toBe(true);
+    expect(ruleIds.has('perf-no-function-derived')).toBe(true);
+    expect(ruleIds.has('perf-prefer-state-raw')).toBe(true);
+    expect(ruleIds.has('sv-no-component-constructor')).toBe(true);
+    expect(ruleIds.has('kit-no-goto-in-server')).toBe(true);
+
+    // Score should be heavily degraded with this many violations
+    expect(result.score.score).toBeLessThan(55);
     expect(result.score.label).toBe('Needs Work');
   });
 
