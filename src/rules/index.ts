@@ -5,7 +5,6 @@ import { svNoEffectStateMutation } from './sv-no-effect-state-mutation.js';
 import { svPreferSnippets } from './sv-prefer-snippets.js';
 import { svNoEventDispatcher } from './sv-no-event-dispatcher.js';
 import { svRequireNativeEvents } from './sv-require-native-events.js';
-import { svNoEventModifiers } from './sv-no-event-modifiers.js';
 import { svNoComponentConstructor } from './sv-no-component-constructor.js';
 import { svPreferDerivedOverEffect } from './sv-prefer-derived-over-effect.js';
 import { svNoStaleDerivedLet } from './sv-no-stale-derived-let.js';
@@ -32,7 +31,6 @@ export const allRules: Rule[] = [
   svPreferSnippets,
   svNoEventDispatcher,
   svRequireNativeEvents,
-  svNoEventModifiers,
   svNoComponentConstructor,
   svPreferDerivedOverEffect,
   svNoStaleDerivedLet,
@@ -58,7 +56,6 @@ export {
   svPreferSnippets,
   svNoEventDispatcher,
   svRequireNativeEvents,
-  svNoEventModifiers,
   svNoComponentConstructor,
   svPreferDerivedOverEffect,
   svNoStaleDerivedLet,
