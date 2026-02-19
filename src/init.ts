@@ -75,6 +75,28 @@ npx svelte-doctor . --fix
 `;
 }
 
+export function generateGitHubWorkflow(): string {
+  return `name: Svelte Doctor
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  svelte-doctor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - run: npm ci
+      - name: Run Svelte Doctor
+        run: npx svelte-doctor . --score
+`;
+}
+
 export function runInit(projectRoot: string): void {
   const resolvedRoot = path.resolve(projectRoot);
 

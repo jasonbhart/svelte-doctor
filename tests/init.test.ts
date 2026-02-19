@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateCursorRules, generateClaudeSkill } from '../src/init.js';
+import { generateCursorRules, generateClaudeSkill, generateGitHubWorkflow } from '../src/init.js';
 
 describe('init', () => {
   it('generates .cursorrules content', () => {
@@ -16,5 +16,16 @@ describe('init', () => {
     expect(content).toContain('svelte-doctor');
     expect(content).toContain('npx svelte-doctor');
     expect(content).toContain('--agent');
+  });
+});
+
+describe('generateGitHubWorkflow', () => {
+  it('generates a valid GitHub Actions workflow', () => {
+    const content = generateGitHubWorkflow();
+    expect(content).toContain('name: Svelte Doctor');
+    expect(content).toContain('npx svelte-doctor . --score');
+    expect(content).toContain('npm ci');
+    expect(content).toContain('actions/checkout@v4');
+    expect(content).toContain('actions/setup-node@v4');
   });
 });
