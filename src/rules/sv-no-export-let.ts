@@ -30,7 +30,7 @@ export const svNoExportLet: Rule = {
   },
   fix: (source) => {
     // Collect all export let declarations
-    const exportLetRegex = /export\s+let\s+(\w+)(?:\s*=\s*([^;]+))?;/g;
+    const exportLetRegex = /export\s+let\s+(\w+)(?:\s*:\s*[^=;]+)?(?:\s*=\s*([^;]+))?;/g;
     const props: string[] = [];
     let match;
 

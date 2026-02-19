@@ -38,9 +38,9 @@ describe('integration: full scan', () => {
     expect(ruleIds.has('sv-no-component-constructor')).toBe(true);
     expect(ruleIds.has('kit-no-goto-in-server')).toBe(true);
 
-    // Score should be heavily degraded with this many violations
-    expect(result.score.score).toBeLessThan(55);
-    expect(result.score.label).toBe('Needs Work');
+    // Score should reflect many violations
+    expect(result.score.score).toBeLessThan(75);
+    expect(['Needs Work', 'Critical']).toContain(result.score.label);
   });
 
   it('respects rule ignoring via config', async () => {

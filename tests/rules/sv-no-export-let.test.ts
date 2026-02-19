@@ -35,4 +35,16 @@ describe('sv-no-export-let', () => {
     expect(fixed).toContain('name');
     expect(fixed).toContain('count = 0');
   });
+
+  it('fixes typed export let props to $props() destructuring', () => {
+    const fixturePath = path.join(__dirname, '../fixtures/legacy-props-typed.svelte');
+    const source = fs.readFileSync(fixturePath, 'utf-8');
+    const fixed = svNoExportLet.fix!(source, {} as any);
+    expect(fixed).not.toBeNull();
+    expect(fixed).toContain('$props()');
+    expect(fixed).not.toContain('export let');
+    expect(fixed).toContain('name');
+    expect(fixed).toContain('count = 0');
+    expect(fixed).toContain('items = []');
+  });
 });

@@ -32,6 +32,8 @@ export const svRequireNativeEvents: Rule = {
       },
     });
   },
+  // Note: Does not fix event forwarding syntax (on:click without =) since
+  // Svelte 5 event forwarding uses a different pattern ({...$$props} or explicit binding)
   fix: (source) => {
     // Replace on:event={handler} with onevent={handler}
     // Does NOT match on:event|modifier (the pipe stops the \w+ match before =)

@@ -26,4 +26,15 @@ describe('sv-prefer-snippets', () => {
     expect(fixed).toContain('{@render footer?.()}');
     expect(fixed).not.toContain('<slot');
   });
+
+  it('fixes slot variants (single quotes, extra attrs)', () => {
+    const fixturePath = path.join(__dirname, '../fixtures/legacy-slot-variants.svelte');
+    const source = fs.readFileSync(fixturePath, 'utf-8');
+    const fixed = svPreferSnippets.fix!(source, {} as any);
+    expect(fixed).not.toBeNull();
+    expect(fixed).toContain('{@render header?.()}');
+    expect(fixed).toContain('{@render sidebar?.()}');
+    // Fallback content slot is NOT fixed (too complex for regex)
+    expect(fixed).toContain('<slot>fallback content</slot>');
+  });
 });

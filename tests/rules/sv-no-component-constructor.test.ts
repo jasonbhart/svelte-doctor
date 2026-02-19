@@ -28,6 +28,12 @@ describe('sv-no-component-constructor', () => {
     expect(fixed).toContain("import { mount } from 'svelte'");
   });
 
+  it('does not fix non-component constructors (no target property)', () => {
+    const source = `const svc = new MyService({ config: true, retries: 3 });`;
+    const fixed = svNoComponentConstructor.fix!(source, {} as any);
+    expect(fixed).toBeNull();
+  });
+
   it('has correct metadata', () => {
     expect(svNoComponentConstructor.id).toBe('sv-no-component-constructor');
     expect(svNoComponentConstructor.severity).toBe('error');
