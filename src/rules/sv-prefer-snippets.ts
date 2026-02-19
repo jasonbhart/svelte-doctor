@@ -29,4 +29,23 @@ export const svPreferSnippets: Rule = {
       },
     });
   },
+  fix: (source) => {
+    let result = source;
+
+    // Replace <slot name="x" /> and <slot name="x"></slot>
+    result = result.replace(
+      /<slot\s+name="(\w+)"\s*\/>/g,
+      '{@render $1?.()}'
+    );
+    result = result.replace(
+      /<slot\s+name="(\w+)"\s*><\/slot>/g,
+      '{@render $1?.()}'
+    );
+
+    // Replace <slot /> and <slot></slot> (default slot -> children)
+    result = result.replace(/<slot\s*\/>/g, '{@render children?.()}');
+    result = result.replace(/<slot\s*><\/slot>/g, '{@render children?.()}');
+
+    return result !== source ? result : null;
+  },
 };

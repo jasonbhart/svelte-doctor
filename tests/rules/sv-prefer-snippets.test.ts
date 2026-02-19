@@ -25,4 +25,14 @@ describe('sv-prefer-snippets', () => {
     const diagnostics = analyzeFixture('clean-snippet.svelte');
     expect(diagnostics).toHaveLength(0);
   });
+
+  it('fixes <slot /> to {@render children?.()}', () => {
+    const fixturePath = path.join(__dirname, '../fixtures/legacy-slot.svelte');
+    const source = fs.readFileSync(fixturePath, 'utf-8');
+    const fixed = svPreferSnippets.fix!(source, {} as any);
+    expect(fixed).not.toBeNull();
+    expect(fixed).toContain('{@render children?.()}');
+    expect(fixed).toContain('{@render footer?.()}');
+    expect(fixed).not.toContain('<slot');
+  });
 });
