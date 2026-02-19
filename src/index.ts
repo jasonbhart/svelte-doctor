@@ -104,7 +104,7 @@ export async function diagnose(
     }
   }
 
-  const score = computeScore(allDiagnostics);
+  const score = computeScore(allDiagnostics, filePaths.length);
 
   return {
     score,
