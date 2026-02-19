@@ -1,7 +1,7 @@
 import type { Diagnostic, ScoreResult } from './types.js';
 
 export function computeScore(diagnostics: Diagnostic[], filesScanned: number): ScoreResult {
-  if (filesScanned === 0) {
+  if (filesScanned <= 0) {
     return { score: 100, label: 'Excellent' };
   }
 

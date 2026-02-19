@@ -28,6 +28,18 @@ describe('computeScore', () => {
     expect(result.label).toBe('Excellent');
   });
 
+  it('returns 100 when filesScanned is 0 even with diagnostics (degenerate case)', () => {
+    const result = computeScore([makeDiag('error')], 0);
+    expect(result.score).toBe(100);
+    expect(result.label).toBe('Excellent');
+  });
+
+  it('guards against negative filesScanned', () => {
+    const result = computeScore([makeDiag('error')], -5);
+    expect(result.score).toBe(100);
+    expect(result.label).toBe('Excellent');
+  });
+
   it('normalizes by file count — large project with few warnings scores well', () => {
     // 120 warnings in 1370 files: density = 120/1370 ≈ 0.0876
     // score = round(100 * e^(-3 * 0.0876)) = round(100 * 0.769) = 77
